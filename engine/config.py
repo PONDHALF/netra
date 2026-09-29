@@ -51,6 +51,8 @@ class EngineConfig:
     vehicle_model: str = os.getenv("NETRA_VEHICLE_MODEL", str(MODELS_DIR / "yolo11s.pt"))
     plate_model: str = os.getenv("NETRA_PLATE_MODEL", str(MODELS_DIR / "plate.pt"))
     plate_ocr_model: str = os.getenv("NETRA_PLATE_OCR_MODEL", str(MODELS_DIR / "plate_ocr.pt"))
+    # PlateNet: ตัวอ่านป้ายที่เทรนเอง (training/plate_ocr) — ถ้ามีไฟล์ จะใช้คู่กับ char-OCR
+    platenet_model: str = os.getenv("NETRA_PLATENET_MODEL", str(MODELS_DIR / "platenet.pt"))
     # Typhoon OCR 3B ช่วยอ่านจังหวัด/ป้ายที่อ่านไม่ครบ — ใช้แรม ~7.5 GB จึงปิดเป็นค่าเริ่มต้น
     typhoon: bool = os.getenv("NETRA_TYPHOON", "0") == "1"
     # เก็บ Typhoon ไว้ในหน่วยความจำหลังใช้ (ไม่ต้องโหลดใหม่ ~7.5 GB ทุกงาน) — auto = เก็บเมื่อใช้ GPU NVIDIA

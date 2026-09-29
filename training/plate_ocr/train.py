@@ -85,6 +85,31 @@ def load_real() -> list[tuple[np.ndarray, str, int]]:
     return out
 
 
+def load_det_crops(real_rows=None) -> list[tuple[np.ndarray, str, int]]:
+    """ป้ายจริงแบบที่ระบบใช้งานจริง: ให้ตัวตรวจจับป้าย (plate.pt) ตัดจากภาพเต็ม 100 ภาพเอง (ขอบเผื่อ 8%)
+    — ต่างจากภาพป้ายที่ตัดไว้ให้ (มีกรอบป้าย/พื้นที่รอบๆ มากกว่า) ใช้ป้ายที่ตัวตรวจจับมั่นใจที่สุดต่อภาพ."""
+    import benchmark
+    from engine.config import EngineConfig
+    from engine.detectors import PlateDetector
+    from engine.pipeline import _clip
+
+    cfg = EngineConfig()
+    det = PlateDetector(cfg)
+    if not det.available:
+        return []
+    out = []
+    for r in benchmark.load_gt(None):
+        frame = cv2.imread(str(benchmark.DATA_DIR / r["image"]))
+        plates = det.detect(frame)
+        if not plates:
+            continue
+        b = max(plates, key=lambda p: p.conf)
+        x1, y1, x2, y2 = _clip(b, frame.shape[1], frame.shape[0], pad=0.08)
+        prov = PROVINCE_CLASSES.index(r["province"]) if r["province"] in PROVINCE_CLASSES else -1
+        out.append((frame[y1:y2, x1:x2].copy(), "".join(r["license_plate"].split()), prov))
+    return out
+
+
 def load_synth_val(n: int = 1000) -> list[tuple[np.ndarray, str, int]]:
     rng = random.Random(12345)
     np.random.seed(12345)
@@ -147,6 +172,8 @@ def main() -> None:
     ap.add_argument("--eval-every", type=int, default=2000)
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--run", default="platenet", help="ชื่อโฟลเดอร์ผลลัพธ์ใน data/train/ (แยกแต่ละรอบการเทรน)")
+    ap.add_argument("--init", default=None, help="เริ่มจากน้ำหนักของ checkpoint นี้ (fine-tune) เช่น engine/models/platenet.pt")
     args = ap.parse_args()
 
     if not list(FONT_DIR.glob("*.ttf")):  # เครื่องใหม่: ดาวน์โหลดฟอนต์ก่อน
@@ -156,6 +183,8 @@ def main() -> None:
             fonts.main()
         except SystemExit:
             pass
+    global OUT
+    OUT = ROOT / "data" / "train" / args.run
     cv2.setNumThreads(1)  # ต้องตั้งก่อนใช้ OpenCV ครั้งแรก (worker ที่ fork ไปจะใช้ค่านี้)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     workers = args.workers or max(2, min(48, (os.cpu_count() or 4) - 8))  # สร้างป้ายจำลองใช้ CPU หนัก
@@ -173,6 +202,9 @@ def main() -> None:
     ce = nn.CrossEntropyLoss(label_smoothing=0.05)
 
     step, best_key = 0, (-1.0, -1.0, -1.0)
+    if args.init:
+        model.load_state_dict(torch.load(args.init, map_location="cpu", weights_only=True)["model"])
+        print(f"เริ่มจากน้ำหนัก {args.init}")
     if args.resume and (OUT / "last.pt").exists():
         ck = torch.load(OUT / "last.pt", map_location="cpu", weights_only=False)
         model.load_state_dict(ck["model"])
@@ -182,9 +214,10 @@ def main() -> None:
         print(f"เทรนต่อจาก step {step}")
 
     real, synth_val = load_real(), load_synth_val()
+    det_val = load_det_crops()
     params = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"device={device} workers={workers} batch={args.batch} steps={args.steps} params={params:.2f}M "
-          f"real_val={len(real)} synth_val={len(synth_val)}")
+          f"real_val={len(real)} det_val={len(det_val)} synth_val={len(synth_val)}")
     loader = torch.utils.data.DataLoader(SynthStream(args.seed + step), batch_size=args.batch, num_workers=workers,
                                          collate_fn=collate, pin_memory=use_amp, persistent_workers=True, worker_init_fn=worker_init,
                                          prefetch_factor=4)
@@ -215,23 +248,26 @@ def main() -> None:
             print(f"step {step:6d}  loss {loss_ema:.3f}  lr {sched.get_last_lr()[0]:.2e}  {rate:.0f} img/s", flush=True)
         if step % args.eval_every == 0 or step == args.steps:
             r, s = evaluate(model, real, device), evaluate(model, synth_val, device)
-            key = (r["both"], r["plate_text"], r["char_acc"])
-            rec = {"step": step, "loss": round(loss_ema, 4), "lr": sched.get_last_lr()[0], "real": r, "synth": s,
+            dv = evaluate(model, det_val, device) if det_val else r
+            # เลือกโมเดลจากภาพที่ตัวตรวจจับตัดเอง (แบบใช้งานจริง) ก่อน แล้วค่อยดูภาพที่ตัดไว้ให้
+            key = (dv["both"] + r["both"], dv["plate_text"] + r["plate_text"], dv["char_acc"] + r["char_acc"])
+            rec = {"step": step, "loss": round(loss_ema, 4), "lr": sched.get_last_lr()[0], "real": r, "det": dv, "synth": s,
                    "img_per_s": round(seen / (time.time() - t0)), "time": time.strftime("%Y-%m-%d %H:%M:%S")}
             improved = key > best_key
             if improved:
                 best_key = key
-                torch.save({"model": model.state_dict(), "meta": {"step": step, "real": r, "synth": s,
+                torch.save({"model": model.state_dict(), "meta": {"step": step, "real": r, "det": dv, "synth": s,
                                                                   "input": [INPUT_H, INPUT_W]}}, OUT / "best.pt")
             rec["best"] = improved
             with open(OUT / "log.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            print(f"== step {step}  ป้ายจริง: เลข {r['plate_text']:.1%} จังหวัด {r['province']:.1%} "
-                  f"ถูกทั้งคู่ {r['both']:.1%} รายตัว {r['char_acc']:.1%}  | จำลอง: เลข {s['plate_text']:.1%}"
+            print(f"== step {step}  ป้ายจริง(ตัดให้): เลข {r['plate_text']:.1%} จังหวัด {r['province']:.1%} "
+                  f"ทั้งคู่ {r['both']:.1%} | ป้ายจริง(ตัวตรวจจับตัด): เลข {dv['plate_text']:.1%} "
+                  f"จังหวัด {dv['province']:.1%} ทั้งคู่ {dv['both']:.1%} | จำลอง: เลข {s['plate_text']:.1%}"
                   f"{'  ★ best' if improved else ''}", flush=True)
             torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                         "step": step, "best_key": list(best_key)}, OUT / "last.pt")
-    print(f"เสร็จ — best: ถูกทั้งคู่ {best_key[0]:.1%} เลข {best_key[1]:.1%}  → {OUT / 'best.pt'}")
+    print(f"เสร็จ — best (ผลรวม 2 ชุดป้ายจริง): ทั้งคู่ {best_key[0]:.2f} เลข {best_key[1]:.2f}  → {OUT / 'best.pt'}")
 
 
 if __name__ == "__main__":

@@ -114,7 +114,7 @@ def merge(base: PlateReading, ty: PlateReading) -> PlateReading:
         base.text, base.valid = ty.text, True
         base.conf = max(base.conf, 0.5)
         base.extras["source"] = "typhoon"
-    if ty.province and ty.valid:
+    if ty.province and ty.valid and base.extras.get("province_conf", 0.0) < 0.7:  # PlateNet มั่นใจแล้วไม่ต้องทับ
         base.province = ty.province
         base.extras["province_source"] = "typhoon"
     base.raw = f"{base.raw} / typhoon: {ty.raw}" if ty.raw else base.raw

@@ -110,7 +110,8 @@ class Engine:
         t = time.time()
         self.tracker = VehicleTracker(self.cfg)
         self.plates = PlateDetector(self.cfg)
-        self.reader = PlateReader(self.cfg.device, self.cfg.ocr_gpu, char_model=self.cfg.plate_ocr_model)
+        self.reader = PlateReader(self.cfg.device, self.cfg.ocr_gpu, char_model=self.cfg.plate_ocr_model,
+                                  platenet_model=self.cfg.platenet_model)
         self._typhoon = None
         self._typhoon_lock = threading.Lock()   # โหลด/ใช้ Typhoon ได้ทีละงาน (งานวิดีโอ + กล้องสด)
         self.finalize_lock = threading.Lock()   # _finalize ใช้ OCR หลายตัว — กันงานวิดีโอกับกล้องสดชนกัน
@@ -237,6 +238,7 @@ class Engine:
             "stride": stride, "events": len(events), "analyze_sec": round(analyze_sec, 1),
             "elapsed_sec": round(time.time() - t0, 1), "output_video": out_video.name,
             "plate_model": self.plates.available, "plate_ocr_model": self.reader.char is not None,
+            "platenet": self.reader.platenet is not None,
             "typhoon": use_typhoon, "typhoon_refined": refined,
             "device": cfg.device,
         }

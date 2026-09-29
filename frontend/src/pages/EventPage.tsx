@@ -157,7 +157,7 @@ export default function EventPage() {
               <Row k="เวลาในวิดีโอ"><span className="font-mono">{fmtOffset(e.video_offset_sec, true)}</span> <span className="text-xs text-muted">(อยู่ในภาพ {fmtOffset(e.first_seen_sec)}–{fmtOffset(e.last_seen_sec)})</span></Row>
               <Row k="กล้อง">{e.source_name}</Row>
               <Row k="Track ID"><span className="font-mono">{e.track_id}</span></Row>
-              {e.ocr_engine && <Row k="ตัวอ่านที่ให้เลขทะเบียน">{({ 'char-ocr': 'โมเดลรายตัวอักษร (plate_ocr.pt)', easyocr: 'EasyOCR', typhoon: 'Typhoon OCR 3B' } as Record<string, string>)[e.ocr_engine] ?? e.ocr_engine}</Row>}
+              {e.ocr_engine && <Row k="ตัวอ่านที่ให้เลขทะเบียน">{({ 'platenet+char': 'PlateNet + char-OCR (อ่านตรงกัน)', platenet: 'PlateNet (โมเดลที่เทรนเอง)', 'char-ocr': 'โมเดลรายตัวอักษร (plate_ocr.pt)', easyocr: 'EasyOCR', typhoon: 'Typhoon OCR 3B' } as Record<string, string>)[e.ocr_engine] ?? e.ocr_engine}</Row>}
               {e.ocr_raw && <Row k="OCR ดิบ"><span className="font-mono text-xs text-muted">{e.ocr_raw}</span></Row>}
             </CardContent>
           </Card>

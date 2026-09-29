@@ -57,7 +57,7 @@ export interface VehicleEvent {
   plate_conf: number
   plate_valid: boolean
   ocr_raw: string | null
-  ocr_engine: 'char-ocr' | 'easyocr' | 'typhoon' | null
+  ocr_engine: 'platenet+char' | 'platenet' | 'char-ocr' | 'easyocr' | 'typhoon' | null
   is_corrected: boolean
   original_plate_text: string | null
   original_plate_province: string | null

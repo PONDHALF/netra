@@ -64,8 +64,16 @@ class CharPlateOCR:
 
 
 class PlateReader:
-    def __init__(self, device: str = "cpu", use_gpu: bool = True, char_model: str | None = None):
+    def __init__(self, device: str = "cpu", use_gpu: bool = True, char_model: str | None = None,
+                 platenet_model: str | None = None):
         import easyocr
+
+        self.platenet = None
+        if platenet_model and Path(platenet_model).exists():
+            from .platenet import PlateNetReader
+
+            self.platenet = PlateNetReader(platenet_model, device)
+            log.info("PlateNet: %s", platenet_model)
 
         self._easy_lock = threading.Lock()
 
@@ -107,11 +115,16 @@ class PlateReader:
         """อ่านจากภาพป้ายที่ตัดมาแล้ว: โมเดลรายตัวอักษรก่อน ส่วนที่ขาดให้ EasyOCR เติม."""
         if plate_img is None or plate_img.size == 0:
             return PlateReading()
-        if self.char is None:
+        if self.platenet is not None:
+            r = self._read_ensemble(plate_img)
+            if r.valid and r.province:
+                return r
+        elif self.char is None:
             r = self.read_plate_easyocr(plate_img)
             r.extras["source"] = "easyocr"
             return r
-        r = self.char.read(plate_img)
+        else:
+            r = self.char.read(plate_img)
         if r.valid and r.province:
             return r
         e = self.read_plate_easyocr(plate_img)
@@ -125,6 +138,33 @@ class PlateReader:
             r.extras["province_source"] = "easyocr"
         r.raw = f"{r.raw} / easyocr: {e.raw}" if e.raw else r.raw
         return r
+
+    # นโยบายรวมผล — เลือกจากการเทียบบนป้ายจริง (training/plate_ocr/compare.py)
+    PROVINCE_MIN_CONF = 0.3   # จังหวัดจาก PlateNet ต่ำกว่านี้ → ใช้ของ char-OCR ถ้ามี (0.3 ดีที่สุดใน compare.py)
+
+    def _read_ensemble(self, plate_img: np.ndarray) -> PlateReading:
+        """PlateNet + char-OCR: อ่านตรงกัน → มั่นใจสูง (ถูก 95% บนป้ายจริง), ขัดแย้ง → ใช้ char-OCR แต่ลดความมั่นใจ
+        (ให้ Typhoon ตัดสินได้ถ้าเปิดไว้), จังหวัดใช้หัวจำแนกของ PlateNet ก่อน."""
+        p = self.platenet.read(plate_img)
+        c = self.char.read(plate_img) if self.char is not None else None
+        norm = lambda s: "".join((s or "").split())  # noqa: E731
+        c_valid = bool(c and c.valid)
+        if p.valid and c_valid and norm(p.text) == norm(c.text):
+            text, valid, conf, source, agree = p.text, True, max(p.conf, c.conf, 0.9), "platenet+char", True
+        elif c_valid:
+            # ขัดแย้ง → ใช้ char-OCR: บนภาพที่ตัวตรวจจับตัดเอง (มีกรอบป้าย/พื้นที่รอบๆ เยอะ) char-OCR แม่นกว่า
+            # (e2e: char 50% vs PlateNet 35%) — ลดความมั่นใจให้ Typhoon ตัดสินได้ถ้าเปิดไว้
+            text, valid, conf, source, agree = c.text, True, min(c.conf, 0.45 if p.valid else c.conf), "char-ocr", False
+        elif p.valid:
+            text, valid, conf, source, agree = p.text, True, min(p.conf, 0.45), "platenet", False
+        else:
+            text, valid, conf, source, agree = p.text or (c.text if c else None), False, 0.0, "platenet", False
+        province = p.province
+        if (p.province_conf < self.PROVINCE_MIN_CONF or not province) and c and c.province:
+            province = c.province
+        raw = f"platenet: {p.raw} ({p.conf:.2f}) | char: {c.raw if c else '-'}"
+        return PlateReading(text=text, province=province, conf=round(conf, 4), raw=raw, valid=valid,
+                            extras={"source": source, "agree": agree, "province_conf": p.province_conf})
 
     def read_plate_easyocr(self, plate_img: np.ndarray) -> PlateReading:
         img = enhance_plate(plate_img)

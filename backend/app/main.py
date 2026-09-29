@@ -70,6 +70,7 @@ def health():
             "device": eng.cfg.device if eng else None,
             "plate_model": eng.plates.available if eng else None,
             "plate_ocr_model": eng.reader.char is not None if eng else None,
+            "platenet": eng.reader.platenet is not None if eng else None,
             "typhoon_available": typhoon_available(),
             "typhoon_default": typhoon_default(),
             "typhoon_loaded": eng is not None and eng._typhoon is not None,

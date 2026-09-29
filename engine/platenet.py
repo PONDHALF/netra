@@ -126,17 +126,22 @@ class PlateNetReader:
         self.device = device
         self.model.to(device).eval()
         self.torch = torch
+        import threading
+
+        self._lock = threading.Lock()
 
     def read(self, bgr: np.ndarray) -> PlateNetResult:
         return self.read_batch([bgr])[0]
 
     def read_batch(self, images: list[np.ndarray]) -> list[PlateNetResult]:
         torch = self.torch
-        x = torch.from_numpy(np.stack([preprocess(im) for im in images])).to(self.device)
-        with torch.inference_mode():
-            logits, prov = self.model(x)
-        logits = logits.float().cpu().numpy()
-        prov = torch.softmax(prov.float(), 1).cpu().numpy()
+        from . import locks
+
+        x = torch.from_numpy(np.stack([preprocess(im) for im in images]))
+        with locks.guard(self._lock), torch.inference_mode():
+            logits, prov = self.model(x.to(self.device))
+            logits = logits.float().cpu().numpy()
+            prov = torch.softmax(prov.float(), 1).cpu().numpy()
         out = []
         for lg, pv in zip(logits, prov):
             raw, conf = ctc_greedy(lg)

@@ -106,6 +106,27 @@ def _graphic_bg(rng: random.Random, w: int, h: int) -> Image.Image:
     return img
 
 
+DEALERS = ["TOYOTA", "HONDA", "ISUZU", "MAZDA", "NISSAN", "MG", "โตโยต้าขอนแก่น", "ฮอนด้า", "ศูนย์บริการ",
+           "ขอนแก่น", "กรุงเทพ", "โตโยต้า", "อีซูซุ", "มิตซูบิชิ"]
+
+
+def add_holder(rng: random.Random, plate: Image.Image, fonts: list[str]) -> Image.Image:
+    """ใส่กรอบป้าย (ดำ/เทา/โครเมียม) รอบป้าย บางกรอบมีชื่อศูนย์บริการด้านล่าง — แบบที่เห็นในภาพจริง."""
+    w, h = plate.size
+    t, b = int(h * rng.uniform(0.04, 0.12)), int(h * rng.uniform(0.08, 0.28))
+    lr = int(w * rng.uniform(0.02, 0.06))
+    color = rng.choice([(15, 15, 15), (30, 30, 30), (70, 70, 75), (160, 160, 165), (200, 200, 205)])
+    out = Image.new("RGB", (w + 2 * lr, h + t + b), color)
+    out.paste(plate, (lr, t))
+    if rng.random() < 0.6:
+        d = ImageDraw.Draw(out)
+        text = rng.choice(DEALERS)
+        f = _fit(d, text, rng.choice(fonts), w * rng.uniform(0.3, 0.7), b * 0.7)
+        fill = (230, 230, 230) if sum(color) < 300 else (30, 30, 30)
+        _text_center(d, out.width / 2, h + t + b / 2, text, f, fill)
+    return out
+
+
 def render_plate(rng: random.Random, fonts: list[str]) -> tuple[Image.Image, str, str]:
     """วาดป้ายความละเอียดสูง (ยังไม่ทำให้เสื่อม) → (ภาพ, ข้อความ, จังหวัด)."""
     top, number, province = random_plate(rng)
@@ -123,6 +144,9 @@ def render_plate(rng: random.Random, fonts: list[str]) -> tuple[Image.Image, str
         number = str(rng.randint(1, 999))
     else:
         W, H = 340, 150
+    if bg is not None and rng.random() < 0.35:  # ป้ายเก่า/สกปรก/แสงน้อย: สีพื้นหมองลง
+        k = rng.uniform(0.65, 0.92)
+        bg = tuple(int(c * k) for c in bg)
     img = _graphic_bg(rng, W, H) if bg is None else Image.new("RGB", (W, H), bg)
     d = ImageDraw.Draw(img)
     bw = rng.randint(3, 6)
@@ -148,7 +172,9 @@ def render_plate(rng: random.Random, fonts: list[str]) -> tuple[Image.Image, str
 def _perspective(rng, img: np.ndarray, bg: np.ndarray) -> np.ndarray:
     """วางป้ายบนพื้นหลัง (เหมือนภาพที่ตัดจากตัวตรวจจับ + ขอบเผื่อ) แล้วบิดมุมเล็กน้อย."""
     h, w = img.shape[:2]
-    pad_x, pad_y = w * rng.uniform(0.0, 0.14), h * rng.uniform(0.0, 0.2)
+    # ภาพที่ตัวตรวจจับตัดจริงมีพื้นที่รอบป้ายมาก (กว้าง:สูง ~1.4:1 ขณะที่ป้าย ~2.3:1) — สุ่มให้ครอบคลุม
+    pad_x = w * rng.uniform(0.0, 0.25)
+    pad_y = h * (rng.uniform(0.0, 0.2) if rng.random() < 0.4 else rng.uniform(0.2, 0.65))
     ow, oh = int(w + 2 * pad_x), int(h + 2 * pad_y)
     j = lambda s: rng.uniform(-s, s)  # noqa: E731
     k = 0.07
@@ -175,7 +201,13 @@ def _background(rng, h: int, w: int) -> np.ndarray:
     sh, sw = max(4, h // 8), max(4, w // 8)
     g = np.linspace(rng.uniform(0.6, 1.0), rng.uniform(0.6, 1.2), sh)[:, None, None]
     small = np.clip(base * g + np.random.normal(0, 12, (sh, sw, 3)), 0, 255).astype(np.uint8)
-    return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+    out = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+    if rng.random() < 0.4:  # กระจังหน้า: แถบแนวนอนสีเข้ม/อ่อนสลับ
+        step = rng.randint(6, 18)
+        shade = rng.choice([0.4, 0.6, 1.4])
+        for y in range(rng.randint(0, step), h, step):
+            out[y:y + step // 2] = np.clip(out[y:y + step // 2].astype(np.float32) * shade, 0, 255).astype(np.uint8)
+    return out
 
 
 def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
@@ -234,6 +266,8 @@ def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
 
 def make_sample(rng: random.Random, fonts: list[str]) -> Sample:
     plate, text, province = render_plate(rng, fonts)
+    if rng.random() < 0.7:
+        plate = add_holder(rng, plate, fonts)
     img = degrade(rng, plate)
     # ป้ายถูกตัดขอบล่างจนไม่เห็นจังหวัด (ตัวตรวจจับตัดพลาด) — สอนให้ตอบ "ไม่เห็น"
     prov_idx = PROVINCE_CLASSES.index(province)

@@ -113,7 +113,7 @@ class StreamSession:
 
     def _live_read(self, tr: _Track, v, frame: np.ndarray, W: int, H: int) -> None:
         """อ่านเลขทะเบียนชั่วคราวไว้แสดงบนภาพสด — ใช้เฉพาะโมเดลรายตัวอักษร (เร็ว ~10 ms บน GPU)."""
-        reader = self.engine.reader.char
+        reader = self.engine.reader.platenet or self.engine.reader.char
         if reader is None or v.plate is None or self.idx - tr.live_idx < LIVE_READ_EVERY:
             return
         x1, y1, x2, y2 = _clip(v.plate, W, H, pad=0.08)
