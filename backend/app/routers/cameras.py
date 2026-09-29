@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -14,6 +16,8 @@ from ..cameras import LIVE_CHANNEL, mask_url
 from ..db import get_db
 from ..models import Event, Source
 from ..worker import hub
+
+MJPEG_MAX_FPS = float(os.getenv("NETRA_LIVE_FPS", "10"))  # fps ที่ส่งให้เบราว์เซอร์ (ประหยัดเน็ต)
 
 router = APIRouter()
 manager = None  # ตั้งค่าใน main.py (CameraManager)
@@ -115,13 +119,14 @@ async def mjpeg(cam_id: int, request: Request):
         raise HTTPException(503, "กล้องไม่ได้เปิดอยู่")
 
     async def frames():
-        last = -1
+        last, next_at = -1, 0.0
         while not await request.is_disconnected():
             r = manager.runners.get(cam_id)
             if r is None:
                 break
-            if r.jpeg is not None and r.jpeg_no != last:
-                last = r.jpeg_no
+            now = time.monotonic()
+            if r.jpeg is not None and r.jpeg_no != last and now >= next_at:
+                last, next_at = r.jpeg_no, now + 1 / MJPEG_MAX_FPS
                 yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(r.jpeg)).encode()
                        + b"\r\n\r\n" + r.jpeg + b"\r\n")
             await asyncio.sleep(0.03)

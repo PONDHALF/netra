@@ -27,7 +27,10 @@ log = logging.getLogger("netra.cameras")
 
 LIVE_CHANNEL = 0  # ช่อง WebSocket ของหน้า Live (job id เริ่มที่ 1)
 CAMERAS_DIR = DATA_DIR / "cameras"
-JPEG_MAX_WIDTH = 1280
+# ภาพสดที่ส่งให้เบราว์เซอร์ (ไม่กระทบการตรวจจับ ซึ่งใช้เฟรมเต็ม) — 1280px@q75 ~135KB/เฟรม × 15fps ≈ 16 Mbps ต่อแท็บ
+# ทำให้หน้าเว็บโหลดไม่ขึ้นเมื่อเปิดผ่านเน็ตนอกสถานที่ → 960px@q70 ~55KB และจำกัด fps ที่ส่ง (ดู routers/cameras.py)
+JPEG_MAX_WIDTH = int(os.getenv("NETRA_LIVE_WIDTH", "960"))
+JPEG_QUALITY = int(os.getenv("NETRA_LIVE_QUALITY", "70"))
 
 # RTSP ผ่าน TCP เสถียรกว่า UDP บนเครือข่ายทั่วไป, timeout 5 วินาทีเพื่อให้ต่อใหม่ได้เร็ว
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|stimeout;5000000|timeout;5000000")
@@ -188,7 +191,7 @@ class CameraRunner:
         h, w = frame.shape[:2]
         if w > JPEG_MAX_WIDTH:
             frame = cv2.resize(frame, (JPEG_MAX_WIDTH, int(h * JPEG_MAX_WIDTH / w)), interpolation=cv2.INTER_AREA)
-        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
         if ok:
             self.jpeg = buf.tobytes()
             self.jpeg_no += 1
