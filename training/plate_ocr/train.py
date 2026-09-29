@@ -29,18 +29,37 @@ sys.path.insert(0, str(ROOT / "training"))
 
 from engine.platenet import (INPUT_H, INPUT_W, PROVINCE_CLASSES, build_model, ctc_greedy, encode,  # noqa: E402
                              format_plate, preprocess)
-from training.plate_ocr.synth import available_fonts, make_sample  # noqa: E402
+from training.plate_ocr.synth import available_fonts, degrade, make_sample  # noqa: E402
 
 OUT = ROOT / "data" / "train" / "platenet"
 FONT_DIR = ROOT / "data" / "fonts"
 
 
 # ------------------------------------------------------------------ data
-class SynthStream(torch.utils.data.IterableDataset):
-    """ป้ายจำลองไม่รู้จบ — แต่ละ worker สุ่มด้วย seed ของตัวเอง (ต้องอยู่ระดับ module ให้ spawn/pickle ได้)."""
+IGNORE = -100  # ไม่มีคำตอบจังหวัด → ไม่คิด loss ส่วนจังหวัด
 
-    def __init__(self, seed: int):
-        self.seed = seed
+
+def load_real_rows(dirs: list[str], split: str) -> list[tuple[str, str, int]]:
+    """ป้ายจริงที่มีคำตอบแล้ว (auto / auto2 / human) จาก labels.csv ของ training/plate_ocr/realdata.py."""
+    import csv as _csv
+
+    out = []
+    for d in dirs:
+        base = ROOT / d
+        for r in _csv.DictReader(open(base / "labels.csv", encoding="utf-8")):
+            if r["split"] != split or r["status"] not in ("auto", "auto2", "human") or not r["text"]:
+                continue
+            prov = PROVINCE_CLASSES.index(r["province"]) if r["province"] in PROVINCE_CLASSES else IGNORE
+            out.append((str(base / r["file"]), r["text"], prov))
+    return out
+
+
+class SynthStream(torch.utils.data.IterableDataset):
+    """ป้ายจำลองไม่รู้จบ ผสมป้ายจริง (ถ้ามี) — แต่ละ worker สุ่มด้วย seed ของตัวเอง (ต้องอยู่ระดับ module ให้ spawn/pickle ได้)
+    ป้ายจริงถูกทำให้เสื่อมแบบเดียวกับป้ายจำลอง (ภาพใน dataset ชัดกว่ากล้องวงจรปิดมาก)."""
+
+    def __init__(self, seed: int, real: list | None = None, real_ratio: float = 0.0):
+        self.seed, self.real, self.real_ratio = seed, real or [], real_ratio
 
     def __iter__(self):
         info = torch.utils.data.get_worker_info()
@@ -48,10 +67,20 @@ class SynthStream(torch.utils.data.IterableDataset):
         rng = random.Random(self.seed * 1000 + wid)
         np.random.seed((self.seed * 1000 + wid) % 2**32)
         fonts = available_fonts(FONT_DIR)
+        cache: dict[str, np.ndarray] = {}
         while True:
-            s = make_sample(rng, fonts)
-            img = s.image.astype(np.float32) / 127.5 - 1.0
-            yield img.transpose(2, 0, 1), encode(s.text), s.province
+            if self.real and rng.random() < self.real_ratio:
+                path, text, prov = rng.choice(self.real)
+                if path not in cache:
+                    cache[path] = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
+                from PIL import Image
+
+                img_u8 = degrade(rng, Image.fromarray(cache[path]))
+            else:
+                s = make_sample(rng, fonts)
+                img_u8, text, prov = s.image, s.text, s.province
+            img = img_u8.astype(np.float32) / 127.5 - 1.0
+            yield img.transpose(2, 0, 1), encode(text), prov
 
 
 def worker_init(_):
@@ -173,6 +202,8 @@ def main() -> None:
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--run", default="platenet", help="ชื่อโฟลเดอร์ผลลัพธ์ใน data/train/ (แยกแต่ละรอบการเทรน)")
+    ap.add_argument("--real", action="append", default=[], help="โฟลเดอร์ป้ายจริง (มี labels.csv) ใส่ได้หลายครั้ง")
+    ap.add_argument("--real-ratio", type=float, default=0.35, help="สัดส่วนป้ายจริงในแต่ละ batch")
     ap.add_argument("--init", default=None, help="เริ่มจากน้ำหนักของ checkpoint นี้ (fine-tune) เช่น engine/models/platenet.pt")
     args = ap.parse_args()
 
@@ -199,7 +230,7 @@ def main() -> None:
     use_amp = device.startswith("cuda")
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     ctc = nn.CTCLoss(blank=0, zero_infinity=True)
-    ce = nn.CrossEntropyLoss(label_smoothing=0.05)
+    ce = nn.CrossEntropyLoss(label_smoothing=0.05, ignore_index=IGNORE)
 
     step, best_key = 0, (-1.0, -1.0, -1.0)
     if args.init:
@@ -215,10 +246,13 @@ def main() -> None:
 
     real, synth_val = load_real(), load_synth_val()
     det_val = load_det_crops()
+    real_train = load_real_rows(args.real, "train") if args.real else []
+    rp_val = [(cv2.imread(p), t, pv) for p, t, pv in load_real_rows(args.real, "test")] if args.real else []
     params = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"device={device} workers={workers} batch={args.batch} steps={args.steps} params={params:.2f}M "
-          f"real_val={len(real)} det_val={len(det_val)} synth_val={len(synth_val)}")
-    loader = torch.utils.data.DataLoader(SynthStream(args.seed + step), batch_size=args.batch, num_workers=workers,
+          f"real_val={len(real)} det_val={len(det_val)} synth_val={len(synth_val)} "
+          f"real_train={len(real_train)} (ratio {args.real_ratio if real_train else 0}) rp_val={len(rp_val)}")
+    loader = torch.utils.data.DataLoader(SynthStream(args.seed + step, real_train, args.real_ratio), batch_size=args.batch, num_workers=workers,
                                          collate_fn=collate, pin_memory=use_amp, persistent_workers=True, worker_init_fn=worker_init,
                                          prefetch_factor=4)
     it = iter(loader)
@@ -249,9 +283,11 @@ def main() -> None:
         if step % args.eval_every == 0 or step == args.steps:
             r, s = evaluate(model, real, device), evaluate(model, synth_val, device)
             dv = evaluate(model, det_val, device) if det_val else r
+            rp = evaluate(model, rp_val, device) if rp_val else None
             # เลือกโมเดลจากภาพที่ตัวตรวจจับตัดเอง (แบบใช้งานจริง) ก่อน แล้วค่อยดูภาพที่ตัดไว้ให้
-            key = (dv["both"] + r["both"], dv["plate_text"] + r["plate_text"], dv["char_acc"] + r["char_acc"])
-            rec = {"step": step, "loss": round(loss_ema, 4), "lr": sched.get_last_lr()[0], "real": r, "det": dv, "synth": s,
+            key = (dv["both"] + r["both"], dv["plate_text"] + r["plate_text"] + (rp["plate_text"] if rp else 0),
+                   dv["char_acc"] + r["char_acc"])
+            rec = {"step": step, "loss": round(loss_ema, 4), "lr": sched.get_last_lr()[0], "real": r, "det": dv, "rp": rp, "synth": s,
                    "img_per_s": round(seen / (time.time() - t0)), "time": time.strftime("%Y-%m-%d %H:%M:%S")}
             improved = key > best_key
             if improved:
@@ -264,7 +300,8 @@ def main() -> None:
             print(f"== step {step}  ป้ายจริง(ตัดให้): เลข {r['plate_text']:.1%} จังหวัด {r['province']:.1%} "
                   f"ทั้งคู่ {r['both']:.1%} | ป้ายจริง(ตัวตรวจจับตัด): เลข {dv['plate_text']:.1%} "
                   f"จังหวัด {dv['province']:.1%} ทั้งคู่ {dv['both']:.1%} | จำลอง: เลข {s['plate_text']:.1%}"
-                  f"{'  ★ best' if improved else ''}", flush=True)
+                  + (f" | ป้ายจริงชุดใหม่(test): เลข {rp['plate_text']:.1%}" if rp else "")
+                  + ("  ★ best" if improved else ""), flush=True)
             torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                         "step": step, "best_key": list(best_key)}, OUT / "last.pt")
     print(f"เสร็จ — best (ผลรวม 2 ชุดป้ายจริง): ทั้งคู่ {best_key[0]:.2f} เลข {best_key[1]:.2f}  → {OUT / 'best.pt'}")
