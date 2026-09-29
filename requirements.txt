@@ -1,0 +1,17 @@
+# Engine
+ultralytics>=8.3.0
+easyocr>=1.7.1
+opencv-python-headless>=4.9
+numpy
+imageio-ffmpeg>=0.5
+lap>=0.5.12             # ByteTrack
+# Backend
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+sqlalchemy>=2.0
+pydantic>=2.7
+openpyxl>=3.1
+# Typhoon OCR 3B (เปิดด้วย NETRA_TYPHOON=1)
+transformers>=4.50
+accelerate>=1.0

@@ -1,0 +1,16 @@
+# เครื่องที่มีการ์ดจอ NVIDIA
+#   Windows: Docker Desktop (WSL2) + NVIDIA driver ล่าสุด — ไม่ต้องติดตั้งอะไรเพิ่ม
+#   Linux:   ต้องติดตั้ง NVIDIA Container Toolkit
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+services:
+  netra:
+    build:
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu128   # รองรับ RTX 20–50 series
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

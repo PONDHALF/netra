@@ -1,0 +1,14 @@
+# ติดตั้งและรัน:  docker compose up --build   → เปิด http://localhost:8000
+services:
+  netra:
+    build: .
+    image: netra:phase1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data                    # วิดีโอ ผลลัพธ์ ฐานข้อมูล และโมเดล OCR ที่ดาวน์โหลด
+      - ./engine/models:/app/engine/models  # yolo11s.pt, plate.pt, plate_ocr.pt
+    environment:
+      - NETRA_DEVICE=${NETRA_DEVICE:-}      # เว้นว่าง = เลือกอัตโนมัติ (cuda > cpu)
+      - NETRA_TYPHOON=${NETRA_TYPHOON:-0}   # 1 = ใช้ Typhoon OCR 3B ช่วยอ่านจังหวัด (แรม ~8 GB)
+    restart: unless-stopped

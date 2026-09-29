@@ -1,0 +1,9 @@
+.venv
+data
+**/node_modules
+frontend/dist
+training/runs
+training/datasets
+**/__pycache__
+*.pyc
+.git

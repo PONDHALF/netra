@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+@import '@fontsource/ibm-plex-sans-thai/400.css';
+@import '@fontsource/ibm-plex-sans-thai/500.css';
+@import '@fontsource/ibm-plex-sans-thai/600.css';
+@import '@fontsource/ibm-plex-sans-thai/700.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@theme {
+  --font-sans: 'IBM Plex Sans Thai', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-bg: #070b14;
+  --color-panel: #0d1422;
+  --color-panel-2: #121b2d;
+  --color-line: #1f2a40;
+  --color-muted: #8391ab;
+  --color-fg: #e6ebf5;
+  --color-accent: #22d3ee;
+  --color-accent-fg: #03222a;
+  --color-plate: #facc15;
+  --color-danger: #f43f5e;
+  --color-ok: #34d399;
+
+  --color-car: #38a3f1;
+  --color-motorcycle: #22c55e;
+  --color-bus: #f59e0b;
+  --color-truck: #a78bfa;
+
+  --animate-pop: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+html, body, #root { height: 100%; }
+body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgb(34 211 238 / 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(250 204 21 / 0.04), transparent 60%),
+    var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* scrollbar */
+* { scrollbar-width: thin; scrollbar-color: #26334d transparent; }
+
+input[type='datetime-local']::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+input[type='range'] { accent-color: var(--color-accent); }
