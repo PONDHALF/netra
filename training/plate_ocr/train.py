@@ -54,6 +54,13 @@ class SynthStream(torch.utils.data.IterableDataset):
             yield img.transpose(2, 0, 1), encode(s.text), s.province
 
 
+def worker_init(_):
+    """1 thread ต่อ worker — ไม่งั้น OpenCV/NumPy ในแต่ละ worker แตก thread เท่าจำนวน core
+    (48 worker × 72 thread บนเครื่อง Xeon แย่ง CPU กันจนเหลือ ~110 ภาพ/วินาที)."""
+    cv2.setNumThreads(1)
+    torch.set_num_threads(1)
+
+
 def collate(batch):
     import torch
 
@@ -177,7 +184,7 @@ def main() -> None:
     print(f"device={device} workers={workers} batch={args.batch} steps={args.steps} params={params:.2f}M "
           f"real_val={len(real)} synth_val={len(synth_val)}")
     loader = torch.utils.data.DataLoader(SynthStream(args.seed + step), batch_size=args.batch, num_workers=workers,
-                                         collate_fn=collate, pin_memory=use_amp, persistent_workers=True,
+                                         collate_fn=collate, pin_memory=use_amp, persistent_workers=True, worker_init_fn=worker_init,
                                          prefetch_factor=4)
     it = iter(loader)
     t0, seen, loss_ema = time.time(), 0, None

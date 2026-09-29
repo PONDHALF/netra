@@ -35,6 +35,9 @@ services:
     shm_size: "8gb"              # DataLoader หลาย worker ส่งภาพผ่าน shared memory (ค่าเริ่มต้น 64 MB ไม่พอ)
     environment:
       - PYTHONUNBUFFERED=1
+      - OMP_NUM_THREADS=1        # กัน thread ล้น: หลาย worker × thread เท่าจำนวน core
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
 
 volumes:
   netra-cache:
