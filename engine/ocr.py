@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 import cv2
 import numpy as np
@@ -13,6 +14,7 @@ import numpy as np
 from pathlib import Path
 
 from .postprocess import OcrToken, PlateReading, parse_tokens
+from . import locks
 from .postprocess import plate_chars
 
 log = logging.getLogger("netra.engine")
@@ -48,18 +50,22 @@ class CharPlateOCR:
 
         self.model = YOLO(path)
         self.device, self.conf, self.imgsz = device, conf, imgsz
+        self._lock = threading.Lock()
 
     def read(self, img: np.ndarray) -> PlateReading:
-        res = self.model.predict(img, conf=self.conf, imgsz=self.imgsz, device=self.device, verbose=False)[0]
+        with locks.guard(self._lock):
+            res = self.model.predict(img, conf=self.conf, imgsz=self.imgsz, device=self.device, verbose=False)[0]
+            boxes, cls, conf = res.boxes.xyxy.tolist(), res.boxes.cls.tolist(), res.boxes.conf.tolist()
         names = self.model.names
-        dets = [(names[int(c)], float(cf), tuple(b)) for b, c, cf in
-                zip(res.boxes.xyxy.tolist(), res.boxes.cls.tolist(), res.boxes.conf.tolist())]
+        dets = [(names[int(c)], float(cf), tuple(b)) for b, c, cf in zip(boxes, cls, conf)]
         return plate_chars.decode(dets)
 
 
 class PlateReader:
     def __init__(self, device: str = "cpu", use_gpu: bool = True, char_model: str | None = None):
         import easyocr
+
+        self._easy_lock = threading.Lock()
 
         self.char: CharPlateOCR | None = None
         if char_model and Path(char_model).exists():
@@ -79,8 +85,9 @@ class PlateReader:
             self.reader = easyocr.Reader(["th", "en"], gpu=False, verbose=False)
 
     def _tokens(self, img: np.ndarray, min_conf: float = 0.05) -> list[tuple[OcrToken, tuple[int, int, int, int]]]:
-        results = self.reader.readtext(img, allowlist=ALLOWLIST, paragraph=False, decoder="beamsearch",
-                                       text_threshold=0.5, low_text=0.3, mag_ratio=1.5)
+        with locks.guard(self._easy_lock):
+            results = self.reader.readtext(img, allowlist=ALLOWLIST, paragraph=False, decoder="beamsearch",
+                                           text_threshold=0.5, low_text=0.3, mag_ratio=1.5)
         out = []
         for pts, text, conf in results:
             text = text.strip()

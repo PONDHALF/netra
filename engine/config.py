@@ -34,6 +34,14 @@ class EngineConfig:
     plate_ocr_model: str = os.getenv("NETRA_PLATE_OCR_MODEL", str(MODELS_DIR / "plate_ocr.pt"))
     # Typhoon OCR 3B ช่วยอ่านจังหวัด/ป้ายที่อ่านไม่ครบ — ใช้แรม ~7.5 GB จึงปิดเป็นค่าเริ่มต้น
     typhoon: bool = os.getenv("NETRA_TYPHOON", "0") == "1"
+    # เก็บ Typhoon ไว้ในหน่วยความจำหลังใช้ (ไม่ต้องโหลดใหม่ ~7.5 GB ทุกงาน) — auto = เก็บเมื่อใช้ GPU NVIDIA
+    typhoon_keep: str = os.getenv("NETRA_TYPHOON_KEEP", "auto")
+
+    @property
+    def keep_typhoon_loaded(self) -> bool:
+        if self.typhoon_keep == "auto":
+            return self.device.startswith("cuda")
+        return self.typhoon_keep == "1"
     device: str = field(default_factory=auto_device)
     imgsz: int = int(os.getenv("NETRA_IMGSZ", "640"))
     # ป้ายในภาพกล้องวงจรปิดเล็กมาก (~30 px ที่ 1080p) — ถ้าย่อทั้งภาพเหลือ 640 จะหาไม่เจอเลย

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -16,7 +17,8 @@ from sqlalchemy.orm import Session
 from .config import DATA_DIR, FRONTEND_DIST, ROOT
 from .db import Base, engine, ensure_columns, get_db
 from .models import Source
-from .routers import events, jobs
+from .cameras import CameraManager
+from .routers import cameras, events, jobs
 from .schemas import SourceOut
 from .worker import hub, runner
 
@@ -30,9 +32,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_columns()
+    # import engine (torch/ultralytics) ใน thread หลักก่อนเริ่ม thread อื่น —
+    # ถ้าหลาย thread import torch พร้อมกัน (โหลด AI + กล้องสด) จะ deadlock
+    importlib.import_module("engine.stream")  # ไม่ใช้ `import engine…` เพราะจะทับตัวแปร engine (DB)
     hub.loop = asyncio.get_running_loop()
     runner.start()
+    cameras.manager.start()
     yield
+    cameras.manager.shutdown()
     runner.shutdown()
 
 
@@ -40,6 +47,8 @@ app = FastAPI(title="NETRA API", version="1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(jobs.router)
 app.include_router(events.router)
+app.include_router(cameras.router)
+cameras.manager = CameraManager(hub, runner)
 
 
 def typhoon_available() -> bool:

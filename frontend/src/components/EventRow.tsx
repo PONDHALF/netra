@@ -61,7 +61,7 @@ export const EventRow = forwardRef<HTMLDivElement, {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted">
-          <span className="font-mono text-fg/90">{fmtOffset(e.video_offset_sec)}</span>
+          <span className="font-mono text-fg/90">{e.video_offset_sec == null ? fmtTime(e.ts) : fmtOffset(e.video_offset_sec)}</span>
           <span>·</span>
           <span className="inline-flex items-center gap-1"><TypeDot type={e.vehicle_type} />{TYPE_SHORT[e.vehicle_type]}</span>
           {e.plate_text && (
@@ -75,7 +75,7 @@ export const EventRow = forwardRef<HTMLDivElement, {
               {e.ocr_engine === 'typhoon' && !e.is_corrected && <TyphoonTag />}
             </>
           )}
-          {showSource && <span className="truncate">· {e.source_name} · {fmtTime(e.ts)}</span>}
+          {showSource && <span className="truncate">· {e.source_name}{e.video_offset_sec != null && ` · ${fmtTime(e.ts)}`}</span>}
         </div>
       </div>
       {action}

@@ -11,6 +11,7 @@ from __future__ import annotations
 import gc
 import logging
 import math
+import threading
 import time
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -20,6 +21,7 @@ from typing import Callable
 import cv2
 import numpy as np
 
+from . import locks
 from .config import EngineConfig
 from .detectors import Box, PlateDetector, VehicleTracker, assign_plates
 from .draw import TYPE_TH, draw_frame
@@ -85,6 +87,8 @@ class _Track:
     hits: int = 0
     max_conf: float = 0.0
     max_width: float = 0.0
+    live_text: str | None = None      # เลขทะเบียนชั่วคราวที่แสดงบนภาพสด (อ่านระหว่างรถยังอยู่ในภาพ)
+    live_idx: int = -1000
     cls_votes: Counter = field(default_factory=Counter)
     candidates: list[_Candidate] = field(default_factory=list)
 
@@ -99,11 +103,14 @@ class Engine:
 
     def __init__(self, cfg: EngineConfig | None = None):
         self.cfg = cfg or EngineConfig()
+        locks.configure(self.cfg.device)
         t = time.time()
         self.tracker = VehicleTracker(self.cfg)
         self.plates = PlateDetector(self.cfg)
         self.reader = PlateReader(self.cfg.device, self.cfg.ocr_gpu, char_model=self.cfg.plate_ocr_model)
         self._typhoon = None
+        self._typhoon_lock = threading.Lock()   # โหลด/ใช้ Typhoon ได้ทีละงาน (งานวิดีโอ + กล้องสด)
+        self.finalize_lock = threading.Lock()   # _finalize ใช้ OCR หลายตัว — กันงานวิดีโอกับกล้องสดชนกัน
         log.info("engine ready in %.1fs (device=%s, plate_model=%s)", time.time() - t, self.cfg.device,
                  self.plates.available)
 
@@ -242,6 +249,7 @@ class Engine:
         return is_available()
 
     def typhoon_model(self):
+        # เรียกภายใต้ _typhoon_lock เท่านั้น
         if self._typhoon is None:
             from .typhoon import TyphoonOCR
 
@@ -252,19 +260,20 @@ class Engine:
 
     def release_typhoon(self) -> None:
         """คืนหน่วยความจำ ~7.5 GB หลังใช้."""
-        if self._typhoon is None:
-            return
-        self._typhoon = None
-        gc.collect()
-        try:
-            import torch
+        with self._typhoon_lock:
+            if self._typhoon is None:
+                return
+            self._typhoon = None
+            gc.collect()
+            try:
+                import torch
 
-            if torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:  # noqa: BLE001
-            pass
+                if torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001
+                pass
 
     def refine_with_typhoon(self, reading, plate_img: np.ndarray):
         """อ่านซ้ำด้วย Typhoon แล้วรวมผล (ใช้ใน refine pass และ benchmark)."""
@@ -272,7 +281,9 @@ class Engine:
 
         if plate_img is None or plate_img.size == 0:
             return reading
-        return merge(reading, self.typhoon_model().read(plate_img))
+        with self._typhoon_lock, locks.guard():
+            ty = self.typhoon_model().read(plate_img)
+        return merge(reading, ty)
 
     def _refine_pass(self, events, out_dir: Path, labels, on_progress, on_event_update, should_stop,
                      start: float) -> int:
@@ -316,7 +327,8 @@ class Engine:
                     on_progress(Progress(start + (0.9 - start) * i / len(todo), "refining", i, len(todo),
                                          round(speed, 2), round((len(todo) - i) / speed, 1), len(events)))
         finally:
-            self.release_typhoon()
+            if not self.cfg.keep_typhoon_loaded:
+                self.release_typhoon()
         return changed
 
     # ----------------------------------------------------------------- helpers
@@ -354,6 +366,10 @@ class Engine:
         del tr.candidates[k:]
 
     def _finalize(self, tr: _Track, fps: float, out_dir: Path, recent: dict, dups: dict) -> VehicleEvent | None:
+        with self.finalize_lock:
+            return self._finalize_locked(tr, fps, out_dir, recent, dups)
+
+    def _finalize_locked(self, tr: _Track, fps: float, out_dir: Path, recent: dict, dups: dict) -> VehicleEvent | None:
         if tr.hits < self.cfg.min_track_hits or not tr.candidates or tr.max_width < self.cfg.min_vehicle_frac:
             return None
         readings, boxes = [], []

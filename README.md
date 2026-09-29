@@ -30,9 +30,24 @@ Typhoon OCR 3B (~7.5 GB) ไม่ได้ติดตั้งบน Mac เ�
 # → events.csv, events/*.jpg, annotated.mp4, summary.json
 ```
 
+## Live (กล้อง real-time)
+หน้า **Live** (`/live`) — ภาพสดพร้อมกรอบรถ/ป้าย + รายการรถที่ผ่านเด้งขึ้นทันที, Typhoon อ่านป้ายที่ไม่มั่นใจซ้ำเบื้องหลัง
+
+| URL กล้อง | ตัวอย่าง |
+|---|---|
+| กล้อง IP (RTSP) | `rtsp://admin:รหัส@192.168.1.64:554/Streaming/Channels/101` (Hikvision) |
+| กล้องจำลอง (Docker) | `rtsp://camsim:8554/cam1` — เล่น `data/samples/yt_1min.mp4` วน, สร้างให้อัตโนมัติ |
+| Webcam | `0` |
+| ไฟล์วิดีโอ (เล่นวน) | `data/samples/yt_1min.mp4` — ใช้บน Mac ที่ไม่มี Docker |
+
+ภาพสดส่งแบบ MJPEG (`/api/cameras/{id}/mjpeg`), event ผ่าน WebSocket `/ws/live` — กล้องหลุดจะต่อใหม่เอง
+เตรียมกล้องจำลองบน Windows จาก Mac: `make remote-sample`
+
 ## โครงสร้าง
 ```
 engine/                 AI pipeline (ใช้ร่วมกันทั้ง Mac และ Windows)
+  stream.py             ประมวลผลภาพสดทีละเฟรม (กล้อง real-time)
+  locks.py              กันเรียกโมเดลพร้อมกันหลาย thread (MPS ต้อง serialize ทั้งหมด)
   pipeline.py           อ่านเฟรม → detect+track → หาป้าย → เลือกเฟรมชัดสุด → OCR+vote → (Typhoon อ่านซ้ำ) → วาดกรอบ → H.264
   detectors.py          YOLO11s + ByteTrack (รถ), ตรวจจับป้าย (plate.pt)
   ocr.py                อ่านป้าย: โมเดลรายตัวอักษร (plate_ocr.pt) → EasyOCR เติมส่วนที่ขาด
@@ -40,7 +55,8 @@ engine/                 AI pipeline (ใช้ร่วมกันทั้ง 
   fetch_models.py       ดาวน์โหลดโมเดล: ตรึงเวอร์ชัน + ตรวจ SHA-256 + สแกน pickle
   postprocess/          รูปแบบป้ายไทย, 77 จังหวัด (fuzzy), แปลงรหัสตัวอักษร, vote หลายเฟรม
   models/               *.pt (ไม่อยู่ใน git — make models)
-backend/app/            FastAPI + SQLAlchemy (SQLite) + WebSocket
+backend/app/            FastAPI + SQLAlchemy (SQLite) + WebSocket, cameras.py = ตัวจัดการกล้องสด
+docker/                 entrypoint.sh (เริ่ม container), mediamtx.yml (กล้องจำลอง RTSP)
 frontend/               React + Vite + TypeScript + Tailwind
 training/               benchmark.py, eval_typhoon.py, eval_ocr.py, train_plate.py, make_demo_video.py
 windows/                สคริปต์ .bat สำหรับเครื่องประมวลผล Windows (start / update / stop / logs / check-gpu)

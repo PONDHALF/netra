@@ -1,4 +1,4 @@
-import { Cpu, Search, Upload } from 'lucide-react'
+import { Cpu, Radio, Search, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { api } from '@/lib/api'
@@ -54,6 +54,7 @@ export function Layout() {
             <span className="font-mono text-lg font-medium tracking-[0.2em]">NETRA</span>
           </NavLink>
           <nav className="flex items-center gap-1">
+            <NavLink to="/live" className={link}><Radio className="size-4" />Live</NavLink>
             <NavLink to="/" end className={link}><Upload className="size-4" />อัปโหลด</NavLink>
             <NavLink to="/search" className={link}><Search className="size-4" />ค้นหาป้าย</NavLink>
           </nav>

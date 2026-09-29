@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import logging
 import shutil
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+from . import locks
 from .config import VEHICLE_CLASSES, EngineConfig
 
 log = logging.getLogger("netra.engine")
@@ -61,6 +63,7 @@ class VehicleTracker:
     def __init__(self, cfg: EngineConfig):
         self.cfg = cfg
         self.model = _load_yolo(cfg.vehicle_model, fallback_name=Path(cfg.vehicle_model).name)
+        self._lock = threading.Lock()
         log.info("vehicle model: %s on %s", cfg.vehicle_model, cfg.device)
 
     def reset(self) -> None:
@@ -71,7 +74,20 @@ class VehicleTracker:
                 t.reset()
 
     def track(self, frame: np.ndarray) -> list[tuple[int, str, Box]]:
-        res = self.model.track(
+        # แปลง tensor → numpy ภายใน lock ด้วย (.cpu() ก็ใช้ GPU)
+        with locks.guard(self._lock):
+            res = self._track(frame)
+            if res.boxes is None or res.boxes.id is None:
+                return []
+            xyxy = res.boxes.xyxy.cpu().numpy()
+            ids = res.boxes.id.int().cpu().numpy()
+            clss = res.boxes.cls.int().cpu().numpy()
+            confs = res.boxes.conf.cpu().numpy()
+        return [(int(tid), VEHICLE_CLASSES.get(int(c), "car"), Box(x1, y1, x2, y2, float(cf)))
+                for (x1, y1, x2, y2), tid, c, cf in zip(xyxy, ids, clss, confs)]
+
+    def _track(self, frame: np.ndarray):
+        return self.model.track(
             frame,
             persist=True,
             tracker="bytetrack.yaml",
@@ -81,16 +97,6 @@ class VehicleTracker:
             device=self.cfg.device,
             verbose=False,
         )[0]
-        out: list[tuple[int, str, Box]] = []
-        if res.boxes is None or res.boxes.id is None:
-            return out
-        xyxy = res.boxes.xyxy.cpu().numpy()
-        ids = res.boxes.id.int().cpu().numpy()
-        clss = res.boxes.cls.int().cpu().numpy()
-        confs = res.boxes.conf.cpu().numpy()
-        for (x1, y1, x2, y2), tid, c, cf in zip(xyxy, ids, clss, confs):
-            out.append((int(tid), VEHICLE_CLASSES.get(int(c), "car"), Box(x1, y1, x2, y2, float(cf))))
-        return out
 
 
 class PlateDetector:
@@ -100,6 +106,7 @@ class PlateDetector:
     def __init__(self, cfg: EngineConfig):
         self.cfg = cfg
         self.model = _load_yolo(cfg.plate_model)
+        self._lock = threading.Lock()  # ใช้ร่วมกันระหว่างงานวิดีโอกับกล้องสด — predictor ของ ultralytics ไม่ thread-safe
         if self.model is None:
             log.warning("ไม่พบโมเดลป้าย %s — ใช้โหมดสำรอง (EasyOCR หาข้อความในภาพรถ)", cfg.plate_model)
 
@@ -110,11 +117,13 @@ class PlateDetector:
     def detect(self, frame: np.ndarray) -> list[Box]:
         if self.model is None:
             return []
-        res = self.model.predict(frame, conf=self.cfg.plate_conf, imgsz=self.cfg.plate_imgsz,
-                                 device=self.cfg.device, verbose=False)[0]
-        if res.boxes is None:
-            return []
-        return [Box(*b, float(c)) for b, c in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy())]
+        with locks.guard(self._lock):
+            res = self.model.predict(frame, conf=self.cfg.plate_conf, imgsz=self.cfg.plate_imgsz,
+                                     device=self.cfg.device, verbose=False)[0]
+            if res.boxes is None:
+                return []
+            xyxy, conf = res.boxes.xyxy.cpu().numpy(), res.boxes.conf.cpu().numpy()
+        return [Box(*b, float(c)) for b, c in zip(xyxy, conf)]
 
 
 def assign_plates(vehicles: list[tuple[int, str, Box]], plates: list[Box]) -> list[TrackedVehicle]:

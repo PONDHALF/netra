@@ -6,9 +6,22 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data                    # วิดีโอ ผลลัพธ์ ฐานข้อมูล และโมเดล OCR ที่ดาวน์โหลด
+      - ./data:/app/data                    # วิดีโอ ผลลัพธ์ ฐานข้อมูล (เปิดดูจาก Windows ได้)
       - ./engine/models:/app/engine/models  # yolo11s.pt, plate.pt, plate_ocr.pt
+      - netra-cache:/cache                  # cache โมเดล (Typhoon 7.5 GB, EasyOCR) — อยู่ใน Docker จึงโหลดเร็ว
     environment:
       - NETRA_DEVICE=${NETRA_DEVICE:-}      # เว้นว่าง = เลือกอัตโนมัติ (cuda > cpu)
       - NETRA_TYPHOON=${NETRA_TYPHOON:-0}   # 1 = ใช้ Typhoon OCR 3B ช่วยอ่านจังหวัด (แรม ~8 GB)
+      - NETRA_DEMO_CAMERA=${NETRA_DEMO_CAMERA:-rtsp://camsim:8554/cam1}  # สร้างกล้องจำลองให้ ถ้ายังไม่มีกล้อง
     restart: unless-stopped
+
+  # กล้องจำลอง (RTSP) — เล่น data/samples/yt_1min.mp4 วน ใช้ทดสอบระหว่างยังไม่มีกล้องจริง
+  camsim:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    volumes:
+      - ./docker/mediamtx.yml:/mediamtx.yml:ro
+      - ./data/samples:/samples:ro
+    restart: unless-stopped
+
+volumes:
+  netra-cache:

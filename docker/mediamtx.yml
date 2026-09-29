@@ -1,0 +1,13 @@
+# กล้องจำลอง: เล่นวิดีโอวนผ่าน RTSP เหมือนกล้อง IP จริง → rtsp://camsim:8554/cam1
+# (วางไฟล์ไว้ที่ data/samples/yt_1min.mp4 — บน Mac: make remote-sample)
+logLevel: warn
+rtsp: yes
+rtspAddress: :8554
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+paths:
+  cam1:
+    runOnInit: ffmpeg -hide_banner -loglevel error -re -stream_loop -1 -i /samples/yt_1min.mp4 -c copy -f rtsp rtsp://localhost:8554/cam1
+    runOnInitRestart: yes

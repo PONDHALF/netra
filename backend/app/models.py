@@ -20,6 +20,8 @@ class Source(Base):
     name: Mapped[str] = mapped_column(String(200))
     type: Mapped[str] = mapped_column(String(20), default="video")  # video | camera
     location: Mapped[str | None] = mapped_column(String(300))
+    url: Mapped[str | None] = mapped_column(String(500))                 # กล้อง: rtsp://… / http://… / 0 (webcam) / ไฟล์
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)         # กล้อง: เริ่มเองตอนเปิดระบบ
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
     jobs: Mapped[list[Job]] = relationship(back_populates="source")

@@ -67,6 +67,33 @@ export interface VehicleEvent {
   plate_img_url: string | null
 }
 
+export type CameraState = 'starting' | 'connecting' | 'online' | 'reconnecting' | 'stopped' | 'error'
+
+export interface CameraStatus {
+  state: CameraState
+  fps: number
+  error: string | null
+  width: number | null
+  height: number | null
+  events: number
+  started_at?: number
+}
+
+export interface Camera {
+  id: number
+  name: string
+  location: string | null
+  url: string
+  enabled: boolean
+  events_today: number
+  status: CameraStatus
+}
+
+export type LiveMessage =
+  | { type: 'cameras'; cameras: Record<string, CameraStatus> }
+  | { type: 'event' | 'event_update'; camera_id: number; event: VehicleEvent }
+  | { type: 'ping' }
+
 export interface EventFilters {
   q?: string
   type?: VehicleType[]
@@ -136,6 +163,13 @@ export const api = {
     req<VehicleEvent>(`/api/events/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
+  cameras: () => req<Camera[]>('/api/cameras'),
+  addCamera: (body: { name: string; url: string; location?: string }) =>
+    req<Camera>('/api/cameras', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  startCamera: (id: number) => req<Camera>(`/api/cameras/${id}/start`, { method: 'POST' }),
+  stopCamera: (id: number) => req<Camera>(`/api/cameras/${id}/stop`, { method: 'POST' }),
+  deleteCamera: (id: number) => req<void>(`/api/cameras/${id}`, { method: 'DELETE' }),
+  mjpegUrl: (id: number, bust: string | number = '') => `/api/cameras/${id}/mjpeg?k=${bust}`,
   exportUrl: (f: EventFilters, format: 'xlsx' | 'csv', sort: 'ts' | 'offset' = 'ts') =>
     `/api/events/export?${filterParams(f, { format, sort })}`,
   imagesZipUrl: (jobId: number) => `/api/jobs/${jobId}/images.zip`,
@@ -167,6 +201,11 @@ export function uploadVideo(
     xhr.send(form)
   })
   return { promise, abort: () => xhr.abort() }
+}
+
+export function liveSocketUrl() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}/ws/live`
 }
 
 export function jobSocketUrl(id: number) {

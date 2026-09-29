@@ -26,12 +26,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY engine/ engine/
 COPY backend/ backend/
 COPY --from=web /web/dist frontend/dist
+COPY docker/entrypoint.sh docker/entrypoint.sh
 
 ENV NETRA_DATA=/app/data \
-    EASYOCR_MODULE_PATH=/app/data/.cache/easyocr \
-    YOLO_CONFIG_DIR=/app/data/.cache/ultralytics \
-    HF_HOME=/app/data/.cache/huggingface \
+    EASYOCR_MODULE_PATH=/cache/easyocr \
+    YOLO_CONFIG_DIR=/cache/ultralytics \
+    HF_HOME=/cache/huggingface \
     PYTHONUNBUFFERED=1
 EXPOSE 8000
-# ดาวน์โหลดโมเดลป้ายไทยตอนเริ่ม (ข้ามถ้ามีแล้ว) — ถ้าออฟไลน์ก็ยังเปิดระบบได้ในโหมดสำรอง
-CMD ["sh", "-c", "python -m engine.fetch_models $([ \"$NETRA_TYPHOON\" = 1 ] && echo --typhoon); exec uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"]
+# ย้าย cache (ครั้งเดียว) + ดาวน์โหลดโมเดลตอนเริ่ม แล้วเปิดเซิร์ฟเวอร์ — ดู docker/entrypoint.sh
+CMD ["sh", "docker/entrypoint.sh"]

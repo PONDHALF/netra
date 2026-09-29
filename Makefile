@@ -11,7 +11,7 @@ COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help setup models sample api web build try bench clean typhoon api-typhoon bench-typhoon docker \
-	ssh-key remote-setup deploy remote-status remote-logs remote-open _need-remote
+	ssh-key remote-setup deploy remote-sample remote-status remote-logs remote-open _need-remote
 
 help:             ## แสดงคำสั่งทั้งหมด
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -96,6 +96,11 @@ deploy: _need-remote ## push โค้ด → Windows git pull + build ใหม
 	    *DEPLOY-EXIT=1*) echo "✗ deploy ล้มเหลว — ดู log ด้านบน"; exit 1;; \
 	  esac; \
 	done
+
+remote-sample: _need-remote ## คัดลอกคลิปทดสอบไปเครื่อง Windows (ใช้เป็นกล้องจำลอง rtsp://camsim:8554/cam1)
+	@test -f $(SAMPLE) || $(MAKE) sample
+	$(SSH) "if not exist \"$(WIN_DIR)\\data\\samples\" mkdir \"$(WIN_DIR)\\data\\samples\""
+	scp -o ConnectTimeout=15 $(SAMPLE) "$(WIN_USER)@$(WIN_HOST):/$(subst \,/,$(WIN_DIR))/data/samples/yt_1min.mp4"
 
 remote-status: _need-remote ## ดูสถานะ container และ GPU บน Windows
 	$(SSH) "cd /d $(WIN_DIR) && git log --oneline -1 && $(COMPOSE_GPU) ps && nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv"
