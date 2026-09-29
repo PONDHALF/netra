@@ -16,6 +16,8 @@
 3. **Git for Windows** — https://git-scm.com/download/win (ค่าเริ่มต้นทั้งหมด)
 
 ### (ถ้าจะใช้ Typhoon) เพิ่มแรมให้ WSL
+> เครื่องที่มีแรม ≥ 32 GB **ข้ามข้อนี้ได้** (เครื่องที่ใช้ตอนนี้: RAM 128 GB + RTX 3060 12 GB — ไม่ต้องทำ)
+
 WSL ใช้แรมได้แค่ครึ่งหนึ่งของเครื่องเป็นค่าเริ่มต้น — Typhoon ต้องการ ~8 GB
 สร้างไฟล์ `C:\Users\<ชื่อผู้ใช้>\.wslconfig`:
 ```ini
@@ -36,7 +38,11 @@ git clone https://github.com/PONDHALF/netra.git
 ดับเบิลคลิก `C:\netra\windows\check-gpu.bat` — ต้องเห็นตารางชื่อการ์ดจอ (nvidia-smi)
 
 ## 4. เริ่มระบบ
-ดับเบิลคลิก `windows\start.bat` แล้วเปิด **http://localhost:8000**
+ดับเบิลคลิก `windows\start-typhoon.bat` (แนะนำสำหรับการ์ดจอ VRAM ≥ 12 GB เช่น RTX 3060 12 GB)
+หรือ `windows\start.bat` (ไม่ใช้ Typhoon) แล้วเปิด **http://localhost:8000**
+
+> **RTX 3060 12 GB**: Typhoon (~7.5 GB) + YOLO/โมเดลป้าย (~1.5 GB) พอดีกับ VRAM และ Typhoon ทำงานหลังวิเคราะห์วิดีโอเสร็จ
+> จึงไม่แย่งหน่วยความจำกัน — ในหน้าอัปโหลดจะติ๊ก "อ่านป้ายซ้ำด้วย Typhoon" ไว้ให้เป็นค่าเริ่มต้น
 
 - ครั้งแรกใช้เวลานาน (~10–20 นาที): build image ~8 GB + ดาวน์โหลดโมเดล
 - ครั้งต่อไปเริ่มในไม่กี่วินาที และระบบเปิดเองหลังรีสตาร์ทเครื่อง (ถ้า Docker Desktop ตั้งให้เปิดตอนบูต)
