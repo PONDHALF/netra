@@ -141,7 +141,7 @@ class CameraRunner:
 
             tag = datetime.now().strftime("%Y%m%d-%H%M%S")
             out_dir = CAMERAS_DIR / str(self.cam_id) / tag
-            session = StreamSession(engine, out_dir, fps=target_fps, tag=tag,
+            session = StreamSession(engine, out_dir, fps=target_fps, tag=tag, out_width=JPEG_MAX_WIDTH,
                                     on_event=lambda ev, ts, d=out_dir: self._on_event(ev, ts, d))
             self._set(state="online", error=None)
             last_no, interval, ema, last_t = 0, 1.0 / target_fps, 0.0, time.time()
@@ -157,11 +157,14 @@ class CameraRunner:
                         frame, last_no = self._latest, self._latest_no
                     t = time.time()
                     annotated = session.process(frame)
+                    t_enc = time.perf_counter()
                     self._publish_frame(annotated)
+                    session._tick("jpeg", t_enc)
                     now = time.time()
                     ema = 0.9 * ema + 0.1 * (1.0 / max(now - last_t, 1e-6)) if ema else 1.0 / max(now - last_t, 1e-6)
                     last_t = now
-                    self._set(fps=round(ema, 1), width=frame.shape[1], height=frame.shape[0])
+                    self._set(fps=round(ema, 1), width=frame.shape[1], height=frame.shape[0],
+                              timing=dict(session.timing), busy_ms=round((time.time() - t) * 1000, 1))
                     spare = interval - (time.time() - t)  # ไม่ประมวลผลเร็วเกิน target_fps (ประหยัด GPU)
                     if spare > 0:
                         self._stop.wait(spare)

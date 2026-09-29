@@ -104,6 +104,9 @@ class Engine:
     def __init__(self, cfg: EngineConfig | None = None):
         self.cfg = cfg or EngineConfig()
         locks.configure(self.cfg.device)
+        from .config import limit_threads
+
+        log.info("threads: %d", limit_threads())
         t = time.time()
         self.tracker = VehicleTracker(self.cfg)
         self.plates = PlateDetector(self.cfg)

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 import time
+
+import cv2
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -28,7 +30,7 @@ LIVE_MIN_PLATE_PX = 40     # ป้ายแคบกว่านี้ไม่
 
 class StreamSession:
     def __init__(self, engine: Engine, out_dir: Path, fps: float, tag: str,
-                 on_event: Callable[[VehicleEvent, float], None] | None = None):
+                 on_event: Callable[[VehicleEvent, float], None] | None = None, out_width: int = 1280):
         """fps = อัตราเฟรมที่ประมวลผลจริง (ใช้แปลงจำนวนเฟรมเป็นเวลา)
         tag = คำนำหน้า track key ให้ชื่อไฟล์ภาพไม่ซ้ำข้ามการเริ่มกล้องแต่ละครั้ง
         on_event(event, unix_ts) ถูกเรียกจาก thread สรุปผล เมื่อรถแต่ละคันออกจากภาพ"""
@@ -45,6 +47,15 @@ class StreamSession:
         self.idx = -1
         self.lost_frames = max(int(self.cfg.lost_seconds * fps), 32)
         self._finalizer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="netra-finalize")
+        self.out_width = out_width
+        self.timing: dict[str, float] = {}  # ms ต่อเฟรม (ค่าเฉลี่ยเคลื่อนที่) แยกตามขั้น — ใช้หาคอขวด
+
+    def _tick(self, name: str, t0: float) -> float:
+        now = time.perf_counter()
+        ms = (now - t0) * 1000
+        prev = self.timing.get(name)
+        self.timing[name] = round(ms if prev is None else prev * 0.9 + ms * 0.1, 1)
+        return now
 
     def process(self, frame: np.ndarray) -> np.ndarray:
         """ประมวลผล 1 เฟรม แล้วคืนภาพที่วาดกรอบแล้ว (สำเนา)."""
@@ -53,8 +64,11 @@ class StreamSession:
         H, W = frame.shape[:2]
         engine = self.engine
 
+        t = time.perf_counter()
         vehicles = self.tracker.track(frame)
+        t = self._tick("vehicles", t)
         plates = engine.plates.detect(frame) if engine.plates.available else []
+        t = self._tick("plates", t)
         items = []
         for v in assign_plates(vehicles, plates):
             tr = self.tracks.get(v.track_id)
@@ -74,13 +88,26 @@ class StreamSession:
             items.append({"box": v.box.as_int(), "plate": v.plate.as_int() if v.plate else None,
                           "cls": v.cls, "label": label})
 
-        for tid in [t for t, tr in self.tracks.items() if self.idx - tr.last_frame > self.lost_frames]:
+        t = self._tick("track+ocr", t)
+        for tid in [k for k, tr in self.tracks.items() if self.idx - tr.last_frame > self.lost_frames]:
             self._finalizer.submit(self._finalize, self.tracks.pop(tid))
         if self.idx % 500 == 0:  # ทิ้งเวลาของเฟรมเก่า (เก็บไว้ ~10 นาที)
             cutoff = self.idx - int(self.fps * 600)
             for k in [k for k in self.frame_time if k < cutoff]:
                 del self.frame_time[k]
-        return draw_frame(frame.copy(), items, self.cfg.font_path)
+        # ย่อภาพก่อนวาด (ภาพสดไม่ต้องใช้ความละเอียดเต็ม) — วาด 1080p ด้วย PIL ช้ากว่ามาก
+        s = min(1.0, self.out_width / W)
+        if s < 1.0:
+            view = cv2.resize(frame, (int(W * s), int(H * s)), interpolation=cv2.INTER_AREA)
+            for it in items:
+                it["box"] = tuple(int(c * s) for c in it["box"])
+                if it["plate"]:
+                    it["plate"] = tuple(int(c * s) for c in it["plate"])
+        else:
+            view = frame.copy()
+        out = draw_frame(view, items, self.cfg.font_path)
+        self._tick("draw", t)
+        return out
 
     def _live_read(self, tr: _Track, v, frame: np.ndarray, W: int, H: int) -> None:
         """อ่านเลขทะเบียนชั่วคราวไว้แสดงบนภาพสด — ใช้เฉพาะโมเดลรายตัวอักษร (เร็ว ~10 ms บน GPU)."""

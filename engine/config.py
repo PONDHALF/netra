@@ -11,6 +11,25 @@ MODELS_DIR = Path(__file__).parent / "models"
 VEHICLE_CLASSES: dict[int, str] = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 
 
+def limit_threads() -> int:
+    """จำกัด thread ของ PyTorch/OpenCV — ค่าเริ่มต้น min(8, จำนวน core)
+    เครื่องที่มี core เยอะ (เช่น 72) ถ้าปล่อยตามค่าเริ่มต้น การประสาน thread จะกินเวลามากกว่างานจริง."""
+    n = int(os.getenv("NETRA_THREADS", "0")) or min(8, os.cpu_count() or 8)
+    try:
+        import torch
+
+        torch.set_num_threads(n)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import cv2
+
+        cv2.setNumThreads(n)
+    except Exception:  # noqa: BLE001
+        pass
+    return n
+
+
 def auto_device() -> str:
     forced = os.getenv("NETRA_DEVICE")
     if forced:
