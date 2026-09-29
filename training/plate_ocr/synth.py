@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import io
 import math
 import random
 from dataclasses import dataclass
@@ -54,9 +55,15 @@ def random_plate(rng: random.Random) -> tuple[str, str, str]:
     return prefix + letters, number, province
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=64)
+def _font_bytes(path: str) -> bytes:
+    # อ่านไฟล์ฟอนต์ครั้งเดียวต่อ worker — ใน Docker บน Windows ไฟล์อยู่ในโฟลเดอร์ที่แชร์เข้ามา อ่านช้ามาก
+    return Path(path).read_bytes()
+
+
+@lru_cache(maxsize=8192)  # 12 ฟอนต์ × หลายร้อยขนาด (หาขนาดพอดีด้วย binary search)
 def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(path, size)
+    return ImageFont.truetype(io.BytesIO(_font_bytes(path)), size)
 
 
 def _fit(draw: ImageDraw.ImageDraw, text: str, font_path: str, max_w: float, max_h: float) -> ImageFont.FreeTypeFont:
