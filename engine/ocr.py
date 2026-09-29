@@ -142,7 +142,7 @@ class PlateReader:
 
     # นโยบายรวมผล — เลือกจากการเทียบบนป้ายจริง (training/plate_ocr/compare.py)
     TIE = os.getenv("NETRA_ENSEMBLE_TIE", "conf")  # ขัดแย้งกัน → conf (ตัวที่มั่นใจกว่า) | platenet | char
-    PROVINCE_MIN_CONF = 0.3   # จังหวัดจาก PlateNet ต่ำกว่านี้ → ใช้ของ char-OCR ถ้ามี (0.3 ดีที่สุดใน compare.py)
+    PROVINCE_MIN_CONF = 0.0   # ใช้จังหวัดของ PlateNet เสมอ (เทรนด้วยป้ายจริงแล้ว fallback ไป char-OCR ทำให้แย่ลง: 91% → 78–89%)
 
     def _read_ensemble(self, plate_img: np.ndarray) -> PlateReading:
         """PlateNet + char-OCR: อ่านตรงกัน → มั่นใจสูง (ถูก 95% บนป้ายจริง), ขัดแย้ง → ใช้ char-OCR แต่ลดความมั่นใจ
