@@ -2,7 +2,7 @@
 
 ขั้นตอน: สุ่มเลข/จังหวัดตามกติกาจริง → วาดป้ายความละเอียดสูง (หลายแบบสี/ฟอนต์/รูปแบบ)
 → ทำให้ดูเหมือนภาพจากกล้องจริง: บิดมุม, วางบนพื้นหลัง, แสงเงา, เบลอ, ย่อเหลือเล็กมาก, noise, JPEG, สิ่งสกปรก
-ความละเอียดต่ำ (ป้ายกว้าง 25–60 px) ถูกสุ่มบ่อยเป็นพิเศษ เพราะเป็นกรณีที่กล้องริมถนนเจอจริง
+ความละเอียดต่ำ (ป้ายกว้าง 32–60 px) ถูกสุ่มบ่อยเป็นพิเศษ เพราะเป็นกรณีที่กล้องริมถนนเจอจริง
 """
 from __future__ import annotations
 
@@ -101,8 +101,8 @@ def _graphic_bg(rng: random.Random, w: int, h: int) -> Image.Image:
     d = ImageDraw.Draw(img)
     for _ in range(rng.randint(2, 8)):
         c = tuple(rng.randint(150, 255) for _ in range(3))
-        x, y, r = rng.randint(0, w), rng.randint(0, h), rng.randint(20, h)
-        d.ellipse([x - r, y - r, x + r, y + r], outline=c, width=rng.randint(2, 10))
+        x, y, r = rng.randint(0, w), rng.randint(0, h), rng.randint(10, h)
+        d.ellipse([x - r, y - r, x + r, y + r], outline=c, width=rng.randint(1, 5))
     return img
 
 
@@ -115,16 +115,18 @@ def render_plate(rng: random.Random, fonts: list[str]) -> tuple[Image.Image, str
     font = rng.choice(fonts)
     stretch = rng.uniform(1.0, 1.35)
 
+    # วาดที่ ~340×150 (ครึ่งหนึ่งของเดิม) — อินพุตโมเดลแค่ 192×64 และป้ายถูกย่อเหลือ ≤220 px อยู่แล้ว
+    # ลดพิกเซล 4 เท่า = สร้างภาพเร็วขึ้นมากบนเครื่อง CPU ช้า
     if moto:  # จักรยานยนต์: 3 บรรทัด หมวด / จังหวัด / เลข
-        W, H = 460, 320
+        W, H = 230, 160
         top = (str(rng.randint(1, 9)) if rng.random() < 0.7 else "") + "".join(rng.choice(LETTERS) for _ in range(2))
         number = str(rng.randint(1, 999))
     else:
-        W, H = 680, 300
+        W, H = 340, 150
     img = _graphic_bg(rng, W, H) if bg is None else Image.new("RGB", (W, H), bg)
     d = ImageDraw.Draw(img)
-    bw = rng.randint(5, 12)
-    d.rounded_rectangle([bw // 2, bw // 2, W - bw // 2, H - bw // 2], radius=rng.randint(8, 24), outline=fg, width=bw)
+    bw = rng.randint(3, 6)
+    d.rounded_rectangle([bw // 2, bw // 2, W - bw // 2, H - bw // 2], radius=rng.randint(4, 12), outline=fg, width=bw)
 
     if moto:
         f1 = _fit(d, top, font, W * 0.7, H * 0.26)
@@ -166,13 +168,14 @@ def _perspective(rng, img: np.ndarray, bg: np.ndarray) -> np.ndarray:
 
 
 def _background(rng, h: int, w: int) -> np.ndarray:
-    """พื้นหลังรอบป้าย: สีกันชนรถ + ไล่แสง + noise."""
+    """พื้นหลังรอบป้าย: สีกันชนรถ + ไล่แสง + noise (สร้างเล็กแล้วขยาย — เร็วกว่าคำนวณทุกพิกเซล)."""
     base = np.array(rng.choice([(20, 20, 20), (200, 200, 200), (120, 120, 125), (150, 30, 30), (240, 240, 240),
                                 (40, 60, 110), (rng.randint(0, 255), rng.randint(0, 255), rng.randint(0, 255))]),
                     np.float32)
-    g = np.linspace(rng.uniform(0.6, 1.0), rng.uniform(0.6, 1.2), h)[:, None, None]
-    arr = np.clip(base * g + np.random.normal(0, 12, (h, w, 3)), 0, 255)
-    return arr.astype(np.uint8)
+    sh, sw = max(4, h // 8), max(4, w // 8)
+    g = np.linspace(rng.uniform(0.6, 1.0), rng.uniform(0.6, 1.2), sh)[:, None, None]
+    small = np.clip(base * g + np.random.normal(0, 12, (sh, sw, 3)), 0, 255).astype(np.uint8)
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
 def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
@@ -187,25 +190,25 @@ def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
             x, y = rng.randint(0, img.shape[1]), rng.randint(0, img.shape[0])
             cv2.circle(img, (x, y), rng.randint(3, 14), c, -1)
 
-    # แสง: ความสว่าง/contrast/gamma + เงาไล่ระดับ
-    f = img.astype(np.float32)
-    f = f * rng.uniform(0.55, 1.35) + rng.uniform(-35, 35)
+    # แสง: ความสว่าง/contrast (uint8) + gamma (lookup table) + เงาไล่ระดับ — เลี่ยงคำนวณ float ทั้งภาพ
+    img = cv2.convertScaleAbs(img, alpha=rng.uniform(0.55, 1.35), beta=rng.uniform(-35, 35))
     if rng.random() < 0.4:
-        sh = np.linspace(rng.uniform(0.4, 1.0), rng.uniform(0.7, 1.1), f.shape[1])[None, :, None]
-        f = f * sh
-    f = 255 * (np.clip(f, 0, 255) / 255) ** rng.uniform(0.7, 1.4)
-    img = np.clip(f, 0, 255).astype(np.uint8)
+        sh = np.linspace(rng.uniform(0.4, 1.0), rng.uniform(0.7, 1.1), img.shape[1], dtype=np.float32)
+        img = cv2.multiply(img, np.repeat(sh[None, :, None], 3, 2).repeat(img.shape[0], 0), dtype=cv2.CV_8U)
+    gamma = rng.uniform(0.7, 1.4)
+    lut = np.clip(255.0 * (np.arange(256) / 255.0) ** gamma, 0, 255).astype(np.uint8)
+    img = cv2.LUT(img, lut)
 
-    # ความละเอียดเป้าหมายของป้าย (กว้าง 22–220 px เน้นช่วงเล็ก) — สุ่มก่อน เพื่อคุมไม่ให้ทั้งเล็กและเบลอหนักจนคนยังอ่านไม่ได้
-    target_w = int(math.exp(rng.uniform(math.log(22), math.log(220))))
+    # ความละเอียดเป้าหมายของป้าย (กว้าง 32–220 px เน้นช่วงเล็ก) — สุ่มก่อน เพื่อคุมไม่ให้ทั้งเล็กและเบลอหนักจนคนยังอ่านไม่ได้
+    target_w = int(math.exp(rng.uniform(math.log(32), math.log(220))))  # ต่ำกว่า ~32 px คนก็อ่านไม่ได้แล้ว
     heavy_ok = target_w >= 60
 
     # เบลอ: Gaussian หรือเบลอจากการเคลื่อนที่ (ป้ายเล็กมากเบลอได้แค่เล็กน้อย เพราะการย่อก็เบลออยู่แล้ว)
     r = rng.random()
     if r < 0.35:
-        img = cv2.GaussianBlur(img, (0, 0), rng.uniform(0.5, 2.5 if heavy_ok else 1.0))
+        img = cv2.GaussianBlur(img, (0, 0), rng.uniform(0.3, 1.3 if heavy_ok else 0.6))  # ค่าตามภาพที่วาดขนาด ~340 px
     elif r < 0.6:
-        k = rng.choice([5, 7, 9, 13] if heavy_ok else [3, 5])
+        k = rng.choice([3, 5, 7] if heavy_ok else [3])
         ker = np.zeros((k, k), np.float32)
         ker[k // 2, :] = 1.0 / k
         M = cv2.getRotationMatrix2D((k / 2, k / 2), rng.uniform(-30, 30), 1)
