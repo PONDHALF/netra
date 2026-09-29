@@ -9,3 +9,5 @@ engine/models/*.pt
 training/runs/
 training/datasets/
 .DS_Store
+.env
+.deploy.env

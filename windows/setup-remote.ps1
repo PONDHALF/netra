@@ -1,0 +1,75 @@
+# NETRA - one-time setup so the Mac can deploy over SSH through Tailscale.
+# Run in PowerShell as Administrator:
+#   powershell -ExecutionPolicy Bypass -File C:\netra\windows\setup-remote.ps1 -PublicKey "ssh-ed25519 AAAA... mac"
+param(
+    [Parameter(Mandatory = $true)][string]$PublicKey,
+    [string]$RepoDir = "C:\netra"
+)
+$ErrorActionPreference = "Stop"
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) { Write-Host "[ERROR] Run PowerShell as Administrator." -ForegroundColor Red; exit 1 }
+
+Write-Host "== 1/5 OpenSSH Server ==" -ForegroundColor Cyan
+$cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*"
+if ($cap.State -ne "Installed") { Add-WindowsCapability -Online -Name $cap.Name | Out-Null }
+Set-Service -Name sshd -StartupType Automatic
+Start-Service sshd
+Write-Host "sshd running"
+
+Write-Host "== 2/5 Allow the Mac's SSH key ==" -ForegroundColor Cyan
+# Administrators use a shared file that must be readable only by Administrators and SYSTEM
+$adminKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
+if (-not (Test-Path $adminKeys) -or -not (Select-String -Path $adminKeys -SimpleMatch $PublicKey -Quiet)) {
+    Add-Content -Path $adminKeys -Value $PublicKey -Encoding ascii
+}
+icacls $adminKeys /inheritance:r /grant "*S-1-5-32-544:F" /grant "*S-1-5-18:F" | Out-Null
+$userSsh = Join-Path $env:USERPROFILE ".ssh"
+New-Item -ItemType Directory -Force -Path $userSsh | Out-Null
+$userKeys = Join-Path $userSsh "authorized_keys"
+if (-not (Test-Path $userKeys) -or -not (Select-String -Path $userKeys -SimpleMatch $PublicKey -Quiet)) {
+    Add-Content -Path $userKeys -Value $PublicKey -Encoding ascii
+}
+Write-Host "key installed"
+
+Write-Host "== 3/5 Firewall: SSH and NETRA web only from Tailscale (100.64.0.0/10) ==" -ForegroundColor Cyan
+Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Disable-NetFirewallRule
+foreach ($r in @(@{Name = "NETRA-SSH-Tailscale"; Port = 22}, @{Name = "NETRA-Web-Tailscale"; Port = 8000})) {
+    Remove-NetFirewallRule -Name $r.Name -ErrorAction SilentlyContinue
+    New-NetFirewallRule -Name $r.Name -DisplayName $r.Name -Direction Inbound -Protocol TCP `
+        -LocalPort $r.Port -RemoteAddress "100.64.0.0/10" -Action Allow -Profile Any | Out-Null
+}
+Write-Host "ports 22 and 8000 open to Tailscale devices only"
+
+Write-Host "== 4/5 Read-only GitHub deploy key (so git pull works over SSH) ==" -ForegroundColor Cyan
+$deployKey = Join-Path $userSsh "netra_deploy"
+if (-not (Test-Path $deployKey)) {
+    cmd /c "ssh-keygen -t ed25519 -f `"$deployKey`" -N `"`" -q -C netra-windows"
+}
+$sshConfig = Join-Path $userSsh "config"
+if (-not (Test-Path $sshConfig) -or -not (Select-String -Path $sshConfig -SimpleMatch "netra_deploy" -Quiet)) {
+    Add-Content -Path $sshConfig -Encoding ascii -Value "`nHost github.com`n  IdentityFile ~/.ssh/netra_deploy`n  IdentitiesOnly yes"
+}
+$knownHosts = Join-Path $userSsh "known_hosts"
+if (-not (Test-Path $knownHosts) -or -not (Select-String -Path $knownHosts -SimpleMatch "github.com" -Quiet)) {
+    ssh-keyscan -t ed25519 github.com 2>$null | Add-Content -Path $knownHosts -Encoding ascii
+}
+if (Test-Path (Join-Path $RepoDir ".git")) {
+    git -C $RepoDir remote set-url origin git@github.com:PONDHALF/netra.git
+    Write-Host "repo remote switched to SSH"
+}
+
+Write-Host "== 5/5 Keep Typhoon on across deploys ==" -ForegroundColor Cyan
+$envFile = Join-Path $RepoDir ".env"
+if (-not (Test-Path $envFile)) { Set-Content -Path $envFile -Value "NETRA_TYPHOON=1" -Encoding ascii }
+Get-Content $envFile
+
+$tsIp = ""
+try { $tsIp = (& tailscale ip -4 2>$null | Select-Object -First 1) } catch {}
+Write-Host ""
+Write-Host "================ DONE - send these to the Mac ================" -ForegroundColor Green
+Write-Host ("WIN_HOST = " + $(if ($tsIp) { $tsIp } else { "(Tailscale not running - start it and run: tailscale ip -4)" }))
+Write-Host ("WIN_USER = " + $env:USERNAME)
+Write-Host "Reminders: Docker Desktop -> Settings -> General -> 'Start Docker Desktop when you sign in'"
+Write-Host "           Windows power settings -> never sleep (deploys fail while asleep)"

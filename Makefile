@@ -3,8 +3,15 @@ FFMPEG = $(shell $(PY) -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg
 SAMPLE_URL := https://www.youtube.com/watch?v=QRdEHt5Uk54
 SAMPLE := data/samples/yt_1min.mp4
 
+# เครื่องประมวลผล Windows (ผ่าน Tailscale) — ตั้งค่าใน .deploy.env (ไม่อยู่ใน git)
+-include .deploy.env
+WIN_DIR ?= C:\netra
+SSH = ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 $(WIN_USER)@$(WIN_HOST)
+COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
+
 .DEFAULT_GOAL := help
-.PHONY: help setup models sample api web build try bench clean typhoon api-typhoon bench-typhoon docker
+.PHONY: help setup models sample api web build try bench clean typhoon api-typhoon bench-typhoon docker \
+	ssh-key remote-setup deploy remote-status remote-logs remote-open _need-remote
 
 help:             ## แสดงคำสั่งทั้งหมด
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -59,3 +66,35 @@ bench-typhoon:    ## benchmark โดยเปิด Typhoon
 # ── Docker (เครื่องประมวลผล Windows ใช้ windows\*.bat แทน) ───────────────
 docker:           ## รันด้วย Docker (CPU)
 	docker compose up --build
+
+# ── เครื่องประมวลผล Windows (ระยะไกลผ่าน Tailscale + SSH) — ดู docs/WINDOWS.md ──
+ssh-key:          ## สร้าง SSH key ของ Mac (ครั้งเดียว) และแสดงคำสั่งที่ต้องรันบน Windows
+	@test -f ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q -C "netra-mac"
+	@echo "รันบน Windows (PowerShell แบบ Administrator):"
+	@echo ""
+	@printf '%s\n' "powershell -ExecutionPolicy Bypass -File C:/netra/windows/setup-remote.ps1 -PublicKey \"$$(cat ~/.ssh/id_ed25519.pub)\""
+
+remote-setup: _need-remote ## เชื่อม Mac กับ Windows: ทดสอบ SSH + เพิ่ม deploy key ของ Windows ใน GitHub
+	@echo "== ทดสอบ SSH ==" && $(SSH) "echo ok %COMPUTERNAME%"
+	@echo "== เพิ่ม deploy key (อ่านอย่างเดียว) ของ Windows ใน GitHub =="
+	@$(SSH) "type %USERPROFILE%\\.ssh\\netra_deploy.pub" > /tmp/netra_deploy.pub
+	@gh repo deploy-key list | grep -q netra-windows || gh repo deploy-key add /tmp/netra_deploy.pub --title netra-windows
+	@rm -f /tmp/netra_deploy.pub
+	@echo "== ทดสอบ git บน Windows ==" && $(SSH) "cd /d $(WIN_DIR) && git fetch && git status -sb"
+
+deploy: _need-remote ## push โค้ดแล้วสั่ง Windows ให้ git pull + build ใหม่ + รีสตาร์ท
+	git push
+	$(SSH) "cd /d $(WIN_DIR) && git pull --ff-only && $(COMPOSE_GPU) up -d --build"
+	@echo "✓ deploy เสร็จ → http://$(WIN_HOST):8000"
+
+remote-status: _need-remote ## ดูสถานะ container และ GPU บน Windows
+	$(SSH) "cd /d $(WIN_DIR) && git log --oneline -1 && $(COMPOSE_GPU) ps && nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv"
+
+remote-logs:  _need-remote ## ดู log ล่าสุดบน Windows (200 บรรทัด)
+	$(SSH) "cd /d $(WIN_DIR) && $(COMPOSE_GPU) logs --tail 200"
+
+remote-open:  _need-remote ## เปิดหน้าเว็บ NETRA บนเครื่อง Windows ในเบราว์เซอร์ของ Mac
+	open http://$(WIN_HOST):8000
+
+_need-remote:
+	@test -n "$(WIN_HOST)" -a -n "$(WIN_USER)" || { echo "ยังไม่ได้ตั้งค่า: สร้างไฟล์ .deploy.env ที่มี"; echo "  WIN_HOST=<Tailscale IP ของ Windows>"; echo "  WIN_USER=<ชื่อผู้ใช้ Windows>"; exit 1; }

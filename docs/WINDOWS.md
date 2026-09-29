@@ -61,6 +61,34 @@ git clone https://github.com/PONDHALF/netra.git
 บน Mac: `git add -A && git commit -m "..." && git push`
 บน Windows: ดับเบิลคลิก `windows\update.bat`
 
+## ทำงานจาก Mac ระยะไกล (ไม่ต้องใช้ AnyDesk)
+
+ใช้ **Tailscale** (VPN ส่วนตัว ฟรี) เชื่อม 2 เครื่อง — เปิดเว็บ NETRA จาก Mac และสั่ง deploy ได้ด้วยคำสั่งเดียว
+พอร์ต 22 (SSH) และ 8000 (เว็บ) เปิดให้เฉพาะเครื่องใน Tailscale ของคุณ ไม่เปิดสู่อินเทอร์เน็ต
+
+**ติดตั้งครั้งเดียว**
+1. ติดตั้ง Tailscale ทั้ง 2 เครื่อง (https://tailscale.com/download) ล็อกอินบัญชีเดียวกัน
+2. บน Mac: `make ssh-key` → คัดลอกคำสั่งที่แสดง
+3. บน Windows (ผ่าน AnyDesk ครั้งสุดท้าย): `cd C:\netra` → `git pull` → เปิด PowerShell **แบบ Administrator** แล้ววางคำสั่งจากข้อ 2
+   สคริปต์จะเปิด OpenSSH Server, ตั้ง firewall, สร้าง deploy key สำหรับ GitHub และแสดง `WIN_HOST` / `WIN_USER`
+4. บน Mac สร้างไฟล์ `.deploy.env` ในโฟลเดอร์โปรเจกต์:
+   ```
+   WIN_HOST=100.x.y.z
+   WIN_USER=ชื่อผู้ใช้windows
+   ```
+5. บน Mac: `make remote-setup` (ทดสอบ SSH + เพิ่ม deploy key ใน GitHub)
+
+**ใช้งานประจำ (บน Mac)**
+| คำสั่ง | ทำอะไร |
+|---|---|
+| `make deploy` | push โค้ด → Windows git pull + build ใหม่ + รีสตาร์ท |
+| `make remote-open` | เปิดเว็บ NETRA บน Windows (อัปโหลดวิดีโอจาก Mac ได้เลย) |
+| `make remote-status` | ดูสถานะ container, commit ล่าสุด และการใช้การ์ดจอ |
+| `make remote-logs` | ดู log ล่าสุด |
+
+**เงื่อนไขฝั่ง Windows**: ต้องล็อกอินค้างไว้, Docker Desktop ตั้งให้เปิดตอนล็อกอิน, และตั้งไม่ให้เครื่อง sleep
+การเปิด/ปิด Typhoon เก็บในไฟล์ `C:\netra\.env` (`NETRA_TYPHOON=1` หรือ `0`) — deploy แล้วค่าไม่หาย
+
 ## ข้อมูลอยู่ที่ไหน
 ทุกอย่างอยู่ใน `C:\netra\data\` — วิดีโอที่อัปโหลด, ผลลัพธ์, ฐานข้อมูล `netra.db`, ภาพป้ายที่แก้ไข (`corrections\`)
 และ cache โมเดล — **ไม่อยู่ใน git** (สำรองโฟลเดอร์นี้เอง)
