@@ -52,7 +52,8 @@ git clone https://github.com/PONDHALF/netra.git
 ### A6. เปิดให้ Mac สั่งงานได้ (SSH ผ่าน Tailscale)
 1. บน Mac สั่ง `make ssh-key` → คัดลอกบรรทัด `powershell -ExecutionPolicy Bypass -File C:/netra/windows/setup-remote.ps1 ...`
 2. บน Windows เปิด **PowerShell แบบ Administrator** แล้ววางบรรทัดนั้น
-3. จดค่า 2 บรรทัดสุดท้ายที่แสดง: **`WIN_HOST = 100.x.y.z`** และ **`WIN_USER = ...`**
+   (ถ้า clone ไว้ที่อื่น เช่น Desktop ให้แก้ `C:/netra` ในคำสั่งให้ตรงกับโฟลเดอร์จริง)
+3. จดค่า 3 บรรทัดสุดท้ายที่แสดง: **`WIN_HOST`**, **`WIN_USER`** และ **`WIN_DIR`**
 
 สคริปต์นี้: เปิด OpenSSH Server, เปิดพอร์ต 22/8000 **เฉพาะเครื่องใน Tailscale**, สร้าง deploy key (อ่านอย่างเดียว) ให้ git pull ได้, เปิด Typhoon ไว้ใน `C:\netra\.env`
 
@@ -81,6 +82,7 @@ make ssh-key        # ใช้ในข้อ A6
 ```
 WIN_HOST=100.x.y.z
 WIN_USER=ชื่อผู้ใช้windows
+WIN_DIR=C:\netra
 ```
 
 ### B4. เชื่อมและทดสอบ

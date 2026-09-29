@@ -1,11 +1,20 @@
 # NETRA - one-time setup so the Mac can deploy over SSH through Tailscale.
-# Run in PowerShell as Administrator:
-#   powershell -ExecutionPolicy Bypass -File C:\netra\windows\setup-remote.ps1 -PublicKey "ssh-ed25519 AAAA... mac"
+# Run in PowerShell as Administrator (safe to run again):
+#   powershell -ExecutionPolicy Bypass -File <repo>\windows\setup-remote.ps1 -PublicKey "ssh-ed25519 AAAA... mac"
 param(
     [Parameter(Mandatory = $true)][string]$PublicKey,
-    [string]$RepoDir = "C:\netra"
+    [string]$RepoDir = ""
 )
 $ErrorActionPreference = "Stop"
+# The repo is the parent folder of this script (works wherever it was cloned)
+if (-not $RepoDir) { $RepoDir = Split-Path -Parent $PSScriptRoot }
+
+# Windows PowerShell 5.1 turns anything a native program writes to stderr into a fatal error
+# under "Stop" (ssh-keyscan and git print progress there) - run them through cmd instead.
+function Invoke-Native([string]$CommandLine) {
+    cmd /c "$CommandLine 2>nul"
+    if ($LASTEXITCODE -ne 0) { Write-Host "[WARN] exit $LASTEXITCODE : $CommandLine" -ForegroundColor Yellow }
+}
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -45,7 +54,7 @@ Write-Host "ports 22 and 8000 open to Tailscale devices only"
 Write-Host "== 4/5 Read-only GitHub deploy key (so git pull works over SSH) ==" -ForegroundColor Cyan
 $deployKey = Join-Path $userSsh "netra_deploy"
 if (-not (Test-Path $deployKey)) {
-    cmd /c "ssh-keygen -t ed25519 -f `"$deployKey`" -N `"`" -q -C netra-windows"
+    Invoke-Native "ssh-keygen -t ed25519 -f `"$deployKey`" -N `"`" -q -C netra-windows"
 }
 $sshConfig = Join-Path $userSsh "config"
 if (-not (Test-Path $sshConfig) -or -not (Select-String -Path $sshConfig -SimpleMatch "netra_deploy" -Quiet)) {
@@ -53,10 +62,12 @@ if (-not (Test-Path $sshConfig) -or -not (Select-String -Path $sshConfig -Simple
 }
 $knownHosts = Join-Path $userSsh "known_hosts"
 if (-not (Test-Path $knownHosts) -or -not (Select-String -Path $knownHosts -SimpleMatch "github.com" -Quiet)) {
-    ssh-keyscan -t ed25519 github.com 2>$null | Add-Content -Path $knownHosts -Encoding ascii
+    $hostKey = Invoke-Native "ssh-keyscan -t ed25519 github.com" | Where-Object { $_ -match "^github\.com " }
+    if ($hostKey) { Add-Content -Path $knownHosts -Value $hostKey -Encoding ascii }
+    else { Write-Host "[WARN] could not fetch github.com host key" -ForegroundColor Yellow }
 }
 if (Test-Path (Join-Path $RepoDir ".git")) {
-    git -C $RepoDir remote set-url origin git@github.com:PONDHALF/netra.git
+    Invoke-Native "git -C `"$RepoDir`" remote set-url origin git@github.com:PONDHALF/netra.git"
     Write-Host "repo remote switched to SSH"
 }
 
@@ -66,10 +77,11 @@ if (-not (Test-Path $envFile)) { Set-Content -Path $envFile -Value "NETRA_TYPHOO
 Get-Content $envFile
 
 $tsIp = ""
-try { $tsIp = (& tailscale ip -4 2>$null | Select-Object -First 1) } catch {}
+try { $tsIp = (Invoke-Native "tailscale ip -4" | Select-Object -First 1) } catch {}
 Write-Host ""
 Write-Host "================ DONE - send these to the Mac ================" -ForegroundColor Green
 Write-Host ("WIN_HOST = " + $(if ($tsIp) { $tsIp } else { "(Tailscale not running - start it and run: tailscale ip -4)" }))
 Write-Host ("WIN_USER = " + $env:USERNAME)
+Write-Host ("WIN_DIR  = " + $RepoDir)
 Write-Host "Reminders: Docker Desktop -> Settings -> General -> 'Start Docker Desktop when you sign in'"
 Write-Host "           Windows power settings -> never sleep (deploys fail while asleep)"
