@@ -55,9 +55,10 @@ class SynthStream(torch.utils.data.IterableDataset):
 
 
 def worker_init(_):
-    """1 thread ต่อ worker — ไม่งั้น OpenCV/NumPy ในแต่ละ worker แตก thread เท่าจำนวน core
-    (48 worker × 72 thread บนเครื่อง Xeon แย่ง CPU กันจนเหลือ ~110 ภาพ/วินาที)."""
-    cv2.setNumThreads(1)
+    """1 thread ต่อ worker — ไม่งั้น torch ในแต่ละ worker แตก thread เท่าจำนวน core
+    (48 worker × 72 thread บนเครื่อง Xeon แย่ง CPU กันจนเหลือ ~110 ภาพ/วินาที)
+    หมายเหตุ: ห้ามเรียก cv2.setNumThreads ที่นี่ — เรียกใน process ลูกหลัง fork ทำให้ OpenCV ค้าง
+    จึงตั้งไว้ครั้งเดียวใน main() ก่อนใช้ OpenCV แล้วให้ worker สืบทอดไป"""
     torch.set_num_threads(1)
 
 
@@ -155,6 +156,7 @@ def main() -> None:
             fonts.main()
         except SystemExit:
             pass
+    cv2.setNumThreads(1)  # ต้องตั้งก่อนใช้ OpenCV ครั้งแรก (worker ที่ fork ไปจะใช้ค่านี้)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     workers = args.workers or max(2, min(48, (os.cpu_count() or 4) - 8))  # สร้างป้ายจำลองใช้ CPU หนัก
     torch.set_num_threads(4)
