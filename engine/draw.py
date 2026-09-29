@@ -41,14 +41,26 @@ def _font(size: int, path: str | None):
     return ImageFont.load_default()
 
 
+@lru_cache(maxsize=1024)
+def _label_patch(text: str, size: int, color: tuple[int, int, int], font_path: str | None) -> np.ndarray:
+    """ภาพป้ายข้อความ (BGR) สร้างครั้งเดียวต่อข้อความ — ไม่ต้องแปลงทั้งเฟรมเป็น PIL ทุกเฟรม
+    (วาดภาษาไทยต้องใช้ PIL; เดิมใช้ ~26 ms/เฟรมบน CPU ช้า เหลือ <1 ms เมื่อใช้ cache)."""
+    font = _font(size, font_path)
+    l, t, r, b = font.getbbox(text)
+    pad = size // 4
+    w, h = (r - l) + 2 * pad, (b - t) + 2 * pad
+    img = Image.new("RGB", (max(w, 1), max(h, 1)), (color[2], color[1], color[0]))
+    ImageDraw.Draw(img).text((pad - l, pad - t), text, font=font, fill=(255, 255, 255))
+    return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+
+
 def draw_frame(frame: np.ndarray, items: list[dict], font_path: str | None = None) -> np.ndarray:
-    """items: [{box, plate, cls, label}] — box/plate เป็น tuple(x1,y1,x2,y2) ในพิกัดของ frame."""
+    """items: [{box, plate, cls, label}] — box/plate เป็น tuple(x1,y1,x2,y2) ในพิกัดของ frame (วาดทับ frame เดิม)."""
     if not items:
         return frame
-    h = frame.shape[0]
-    thick = max(2, h // 400)
-    size = max(14, h // 42)
-    labels = []
+    H, W = frame.shape[:2]
+    thick = max(2, H // 400)
+    size = max(14, H // 42)
     for it in items:
         color = COLORS.get(it["cls"], (200, 200, 200))
         x1, y1, x2, y2 = it["box"]
@@ -56,16 +68,12 @@ def draw_frame(frame: np.ndarray, items: list[dict], font_path: str | None = Non
         if it.get("plate"):
             px1, py1, px2, py2 = it["plate"]
             cv2.rectangle(frame, (px1, py1), (px2, py2), PLATE_COLOR, thick)
-        labels.append((x1, y1, it["label"], color))
-
-    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    d = ImageDraw.Draw(img)
-    font = _font(size, font_path)
-    for x1, y1, text, color in labels:
-        l, t, r, b = d.textbbox((0, 0), text, font=font)
-        tw, th = r - l, b - t
-        pad = size // 4
-        ty = max(0, y1 - th - 2 * pad)
-        d.rectangle([x1, ty, x1 + tw + 2 * pad, ty + th + 2 * pad], fill=(color[2], color[1], color[0]))
-        d.text((x1 + pad, ty + pad - t), text, font=font, fill=(255, 255, 255))
-    return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+        if not it.get("label"):
+            continue
+        patch = _label_patch(it["label"], size, color, font_path)
+        ph, pw = patch.shape[:2]
+        ty, tx = max(0, y1 - ph), max(0, min(x1, W - 1))
+        ph, pw = min(ph, H - ty), min(pw, W - tx)
+        if ph > 0 and pw > 0:
+            frame[ty:ty + ph, tx:tx + pw] = patch[:ph, :pw]
+    return frame

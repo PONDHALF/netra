@@ -42,12 +42,15 @@ class TrackedVehicle:
     plate: Box | None = None
 
 
-def _load_yolo(path: str, fallback_name: str | None = None):
+def _load_yolo(path: str, fallback_name: str | None = None, imgsz: int | None = None, device: str = "cpu"):
     from ultralytics import YOLO
+
+    from . import trt
 
     p = Path(path)
     if p.exists():
-        return YOLO(str(p))
+        # การ์ด NVIDIA: ใช้ TensorRT ถ้าทำได้ (แปลงอัตโนมัติครั้งแรก) — ไม่งั้นใช้ .pt ตามเดิม
+        return YOLO(trt.model_path(p, imgsz, device) if imgsz else str(p), task="detect")
     if fallback_name is None:
         return None
     # ครั้งแรก: ให้ Ultralytics ดาวน์โหลดโมเดลมาตรฐาน แล้วย้ายไปเก็บที่ engine/models/
@@ -62,9 +65,10 @@ def _load_yolo(path: str, fallback_name: str | None = None):
 class VehicleTracker:
     def __init__(self, cfg: EngineConfig):
         self.cfg = cfg
-        self.model = _load_yolo(cfg.vehicle_model, fallback_name=Path(cfg.vehicle_model).name)
+        self.model = _load_yolo(cfg.vehicle_model, fallback_name=Path(cfg.vehicle_model).name,
+                                imgsz=cfg.imgsz, device=cfg.device)
         self._lock = threading.Lock()
-        log.info("vehicle model: %s on %s", cfg.vehicle_model, cfg.device)
+        log.info("vehicle model: %s on %s", Path(self.model.ckpt_path or cfg.vehicle_model).name, cfg.device)
 
     def reset(self) -> None:
         # ล้างสถานะ tracker ระหว่างวิดีโอ
@@ -105,7 +109,7 @@ class PlateDetector:
 
     def __init__(self, cfg: EngineConfig):
         self.cfg = cfg
-        self.model = _load_yolo(cfg.plate_model)
+        self.model = _load_yolo(cfg.plate_model, imgsz=cfg.plate_imgsz, device=cfg.device)
         self._lock = threading.Lock()  # ใช้ร่วมกันระหว่างงานวิดีโอกับกล้องสด — predictor ของ ultralytics ไม่ thread-safe
         if self.model is None:
             log.warning("ไม่พบโมเดลป้าย %s — ใช้โหมดสำรอง (EasyOCR หาข้อความในภาพรถ)", cfg.plate_model)

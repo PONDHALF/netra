@@ -67,7 +67,9 @@ class StreamSession:
         t = time.perf_counter()
         vehicles = self.tracker.track(frame)
         t = self._tick("vehicles", t)
-        plates = engine.plates.detect(frame) if engine.plates.available else []
+        # หาป้ายเฉพาะเมื่อมีรถคันใหญ่พอจะอ่านป้ายได้ (เฟรมที่มีแต่รถไกลๆ ไม่ต้องเสีย ~25–40 ms)
+        big_enough = any((b.x2 - b.x1) >= self.cfg.min_vehicle_frac * W for _, _, b in vehicles)
+        plates = engine.plates.detect(frame) if engine.plates.available and big_enough else []
         t = self._tick("plates", t)
         items = []
         for v in assign_plates(vehicles, plates):
@@ -98,7 +100,7 @@ class StreamSession:
         # ย่อภาพก่อนวาด (ภาพสดไม่ต้องใช้ความละเอียดเต็ม) — วาด 1080p ด้วย PIL ช้ากว่ามาก
         s = min(1.0, self.out_width / W)
         if s < 1.0:
-            view = cv2.resize(frame, (int(W * s), int(H * s)), interpolation=cv2.INTER_AREA)
+            view = cv2.resize(frame, (int(W * s), int(H * s)), interpolation=cv2.INTER_LINEAR)
             for it in items:
                 it["box"] = tuple(int(c * s) for c in it["box"])
                 if it["plate"]:

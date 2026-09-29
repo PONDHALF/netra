@@ -48,7 +48,9 @@ class CharPlateOCR:
     def __init__(self, path: str, device: str, conf: float = 0.25, imgsz: int = 640):
         from ultralytics import YOLO
 
-        self.model = YOLO(path)
+        from . import trt
+
+        self.model = YOLO(trt.model_path(path, imgsz, device), task="detect")
         self.device, self.conf, self.imgsz = device, conf, imgsz
         self._lock = threading.Lock()
 

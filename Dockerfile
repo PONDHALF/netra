@@ -19,6 +19,13 @@ ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
 # cache mount: ไฟล์ที่โหลดแล้วเก็บไว้ข้าม build — ถ้าเน็ตหลุดกลางทาง รอบถัดไปไม่ต้องโหลดใหม่ทั้งหมด (~3 GB)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --retries 10 --timeout 120 torch torchvision --index-url ${TORCH_INDEX}
+# TensorRT (เฉพาะ image สำหรับการ์ด NVIDIA — docker-compose.gpu.yml ตั้ง INSTALL_TRT=1)
+# ทำให้ YOLO เร็วขึ้นหลายเท่าบนเครื่องที่ CPU ช้า — engine/trt.py แปลงโมเดลให้อัตโนมัติตอนเริ่มครั้งแรก
+ARG INSTALL_TRT=0
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$INSTALL_TRT" = "1" ]; then \
+      pip install --retries 10 --timeout 120 "tensorrt-cu12" "onnx>=1.12.0" "onnxslim>=0.1.71"; \
+    fi
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --retries 10 --timeout 120 -r requirements.txt

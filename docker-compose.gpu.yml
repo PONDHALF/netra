@@ -7,6 +7,7 @@ services:
     build:
       args:
         TORCH_INDEX: https://download.pytorch.org/whl/cu128   # รองรับ RTX 20–50 series
+        INSTALL_TRT: "1"                                      # TensorRT: YOLO เร็วขึ้นหลายเท่า
     deploy:
       resources:
         reservations:
