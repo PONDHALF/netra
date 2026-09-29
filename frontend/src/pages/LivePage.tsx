@@ -22,7 +22,7 @@ const URL_EXAMPLES = [
   { label: 'Hikvision', url: 'rtsp://admin:รหัส@192.168.1.64:554/Streaming/Channels/101' },
   { label: 'Dahua', url: 'rtsp://admin:รหัส@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0' },
   { label: 'Webcam', url: '0' },
-  { label: 'ไฟล์วิดีโอ (เล่นวน)', url: 'data/samples/yt_1min.mp4' },
+  { label: 'ไฟล์วิดีโอ (เล่นวน)', url: 'data/samples/live.mp4' },
 ]
 
 /** รักษาการเชื่อมต่อ WebSocket หน้า Live — ต่อใหม่เองถ้าหลุด */

@@ -15,9 +15,9 @@
 ## พัฒนาบน Mac
 ```bash
 make setup     # ครั้งแรก: .venv (Python 3.12) + npm install + ดาวน์โหลดโมเดล
-make sample    # ดาวน์โหลดคลิปทดสอบ 1 นาที → data/samples/yt_1min.mp4
+make sample    # ดาวน์โหลดคลิปทดสอบ 10 นาที → data/samples/live.mp4
 make api       # backend + เว็บ → http://localhost:8000   (make web = หน้าเว็บแบบ hot reload ที่ :5173)
-make try       # ทดสอบ engine กับคลิป 1 นาทีโดยไม่ต้องเปิดเว็บ
+make try       # ทดสอบ engine กับคลิปทดสอบโดยไม่ต้องเปิดเว็บ
 make bench     # วัดความแม่นยำบนชุดทดสอบ 100 ภาพ
 make clean     # ล้างข้อมูลทดสอบ (วิดีโอที่อัปโหลด ผลลัพธ์ ฐานข้อมูล)
 make help      # ดูคำสั่งทั้งหมด
@@ -36,9 +36,9 @@ Typhoon OCR 3B (~7.5 GB) ไม่ได้ติดตั้งบน Mac เ�
 | URL กล้อง | ตัวอย่าง |
 |---|---|
 | กล้อง IP (RTSP) | `rtsp://admin:รหัส@192.168.1.64:554/Streaming/Channels/101` (Hikvision) |
-| กล้องจำลอง (Docker) | `rtsp://camsim:8554/cam1` — เล่น `data/samples/yt_1min.mp4` วน, สร้างให้อัตโนมัติ |
+| กล้องจำลอง (Docker) | `rtsp://camsim:8554/cam1` — เล่น `data/samples/live.mp4` วน, สร้างให้อัตโนมัติ |
 | Webcam | `0` |
-| ไฟล์วิดีโอ (เล่นวน) | `data/samples/yt_1min.mp4` — ใช้บน Mac ที่ไม่มี Docker |
+| ไฟล์วิดีโอ (เล่นวน) | `data/samples/live.mp4` — ใช้บน Mac ที่ไม่มี Docker |
 
 ภาพสดส่งแบบ MJPEG (`/api/cameras/{id}/mjpeg`), event ผ่าน WebSocket `/ws/live` — กล้องหลุดจะต่อใหม่เอง
 เตรียมกล้องจำลองบน Windows จาก Mac: `make remote-sample`

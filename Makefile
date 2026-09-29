@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 FFMPEG = $(shell $(PY) -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")
 SAMPLE_URL := https://www.youtube.com/watch?v=QRdEHt5Uk54
-SAMPLE := data/samples/yt_1min.mp4
+SAMPLE := data/samples/live.mp4
 
 # เครื่องประมวลผล Windows (ผ่าน Tailscale) — ตั้งค่าใน .deploy.env (ไม่อยู่ใน git)
 -include .deploy.env
@@ -26,10 +26,9 @@ setup:            ## ติดตั้งทั้งหมดสำหรั�
 models:           ## ดาวน์โหลด/ซ่อมโมเดล (yolo11s, plate, plate_ocr) — ตรวจ hash ทุกไฟล์
 	$(PY) -m engine.fetch_models
 
-sample:           ## ดาวน์โหลดคลิปทดสอบ 1 นาที (ถนนใต้รถไฟฟ้า กทม.) → data/samples/yt_1min.mp4
+sample:           ## ดาวน์โหลดคลิปทดสอบ 10 นาที (ถนน กทม. 1080p) → data/samples/live.mp4
 	@mkdir -p data/samples
-	$(PY) -m yt_dlp --no-warnings -f 137 --download-sections "*280-340" --force-keyframes-at-cuts \
-		--ffmpeg-location "$(FFMPEG)" -o "$(SAMPLE)" "$(SAMPLE_URL)"
+	$(PY) -m yt_dlp --no-warnings -f 137 --ffmpeg-location "$(FFMPEG)" -o "$(SAMPLE)" "$(SAMPLE_URL)"
 
 # ── พัฒนา ──────────────────────────────────────────────────────────────
 api:              ## รัน backend + เว็บที่ build แล้ว (http://localhost:8000)
@@ -41,7 +40,7 @@ web:              ## รันหน้าเว็บแบบ hot reload (http
 build:            ## build หน้าเว็บ ให้ backend เสิร์ฟที่ :8000
 	cd frontend && npm run build
 
-try:              ## ทดสอบ engine กับคลิป 1 นาทีผ่านคำสั่ง (ไม่ต้องเปิดเว็บ) → data/outputs/try
+try:              ## ทดสอบ engine กับคลิปทดสอบผ่านคำสั่ง (ไม่ต้องเปิดเว็บ) → data/outputs/try
 	@test -f $(SAMPLE) || $(MAKE) sample
 	$(PY) -m engine.cli $(SAMPLE) --out data/outputs/try
 
@@ -104,7 +103,7 @@ deploy: _need-remote ## push โค้ด → Windows git pull + build ใหม
 remote-sample: _need-remote ## คัดลอกคลิปทดสอบไปเครื่อง Windows (ใช้เป็นกล้องจำลอง rtsp://camsim:8554/cam1)
 	@test -f $(SAMPLE) || $(MAKE) sample
 	$(SSH) "if not exist \"$(WIN_DIR)\\data\\samples\" mkdir \"$(WIN_DIR)\\data\\samples\""
-	scp -o ConnectTimeout=15 $(SAMPLE) "$(WIN_USER)@$(WIN_HOST):/$(subst \,/,$(WIN_DIR))/data/samples/yt_1min.mp4"
+	scp -o ConnectTimeout=15 $(SAMPLE) "$(WIN_USER)@$(WIN_HOST):/$(subst \,/,$(WIN_DIR))/data/samples/live.mp4"
 
 TRAIN_ARGS ?=
 remote-train: _need-remote ## เทรน PlateNet บน Windows (GPU) เบื้องหลัง — ดูผล: make remote-train-status  (ส่งค่าเพิ่ม: TRAIN_ARGS="--steps 30000")

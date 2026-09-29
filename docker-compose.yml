@@ -15,7 +15,7 @@ services:
       - NETRA_DEMO_CAMERA=${NETRA_DEMO_CAMERA:-rtsp://camsim:8554/cam1}  # สร้างกล้องจำลองให้ ถ้ายังไม่มีกล้อง
     restart: unless-stopped
 
-  # กล้องจำลอง (RTSP) — เล่น data/samples/yt_1min.mp4 วน ใช้ทดสอบระหว่างยังไม่มีกล้องจริง
+  # กล้องจำลอง (RTSP) — เล่น data/samples/live.mp4 วน ใช้ทดสอบระหว่างยังไม่มีกล้องจริง
   camsim:
     image: bluenviron/mediamtx:latest-ffmpeg
     volumes:
