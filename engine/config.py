@@ -77,6 +77,14 @@ class EngineConfig:
     min_vehicle_frac: float = float(os.getenv("NETRA_MIN_VEHICLE_FRAC", "0.06"))
     top_k: int = 3                    # จำนวนเฟรมที่ดีที่สุดที่นำไป OCR แล้ว vote
     dedup_seconds: float = 10.0       # ป้ายเดียวกันซ้ำภายในกี่วินาทีให้ถือว่าเป็นคันเดิม
-    ocr_gpu: bool = os.getenv("NETRA_OCR_GPU", "auto") != "0"
+    # EasyOCR (ตัวอ่านสำรอง) ใช้ GPU หรือไม่: auto = ใช้ CPU บนการ์ด NVIDIA เพื่อคืน VRAM ~1–2 GB ให้ Typhoon/กล้อง
+    # (ถูกเรียกไม่บ่อยและรันใน thread สรุปผล ไม่กระทบภาพสด), ใช้ GPU บน Mac (MPS)
+    ocr_gpu_mode: str = os.getenv("NETRA_OCR_GPU", "auto")
+
+    @property
+    def ocr_gpu(self) -> bool:
+        if self.ocr_gpu_mode == "auto":
+            return not self.device.startswith("cuda")
+        return self.ocr_gpu_mode == "1"
     max_output_width: int = 1280
     font_path: str | None = os.getenv("NETRA_FONT")

@@ -131,4 +131,7 @@ make bench     # ชุดทดสอบ thai-parking-100 (ภาพกล้�
 | `NETRA_DATA` | `./data` | ที่เก็บข้อมูล |
 | `NETRA_PLATE_MODEL` | `engine/models/plate.pt` | โมเดลตรวจจับป้าย |
 | `NETRA_PLATE_OCR_MODEL` | `engine/models/plate_ocr.pt` | โมเดลอ่านป้ายรายตัวอักษร |
+| `NETRA_OCR_GPU` | `auto` | EasyOCR ใช้ GPU หรือไม่ — auto: CPU บนการ์ด NVIDIA (ประหยัด VRAM), GPU บน Mac |
+| `NETRA_TRT` | `auto` | ใช้ TensorRT กับ YOLO บนการ์ด NVIDIA (แปลงอัตโนมัติครั้งแรก) |
+| `NETRA_THREADS` | min(8, cores) | จำนวน thread ของ PyTorch/OpenCV |
 | `NETRA_TYPHOON` | `0` | `1` = ใช้ Typhoon OCR 3B ช่วยอ่านจังหวัด |

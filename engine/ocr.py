@@ -80,6 +80,7 @@ class PlateReader:
             gpu = True
         elif use_gpu and device == "mps":
             gpu = "mps"
+        log.info("EasyOCR บน %s", gpu or "cpu")
         try:
             self.reader = easyocr.Reader(["th", "en"], gpu=gpu, verbose=False)
         except Exception as e:  # บางเวอร์ชันไม่รองรับ mps
