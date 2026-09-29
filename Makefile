@@ -10,7 +10,7 @@ SSH = ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliv
 COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
 .DEFAULT_GOAL := help
-.PHONY: help setup models sample api web build try bench clean typhoon api-typhoon bench-typhoon docker \
+.PHONY: help setup models sample api web build try bench synth-preview clean typhoon api-typhoon bench-typhoon docker \
 	ssh-key remote-setup deploy remote-sample remote-train remote-train-status remote-train-stop remote-train-fetch remote-status remote-logs remote-open _need-remote
 
 help:             ## แสดงคำสั่งทั้งหมด
@@ -47,6 +47,10 @@ try:              ## ทดสอบ engine กับคลิป 1 นาที
 
 bench:            ## วัดความแม่นยำบนชุดทดสอบ 100 ภาพ (เทียบกับครั้งก่อนอัตโนมัติ)
 	$(PY) -u training/benchmark.py
+
+synth-preview:    ## ดูตัวอย่างป้ายจำลองที่ใช้เทรน PlateNet (สุ่มใหม่ทุกครั้ง) แล้วเปิดภาพ
+	$(PY) -m training.plate_ocr.preview
+	open data/outputs/synth/clean.jpg data/outputs/synth/training.jpg
 
 clean:            ## ล้างข้อมูลที่ทดสอบ (วิดีโอที่อัปโหลด, ผลลัพธ์, ฐานข้อมูล) — เก็บคลิปทดสอบและชุด benchmark ไว้
 	rm -rf data/uploads data/outputs data/corrections data/screens data/api.log
