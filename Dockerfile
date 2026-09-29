@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ---------- 1) build หน้าเว็บ
 FROM node:22-slim AS web
 WORKDIR /web
@@ -15,9 +16,12 @@ WORKDIR /app
 
 # CPU เป็นค่าเริ่มต้น — เครื่องที่มี NVIDIA ใช้ docker-compose.gpu.yml (TORCH_INDEX=.../cu124)
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir torch torchvision --index-url ${TORCH_INDEX}
+# cache mount: ไฟล์ที่โหลดแล้วเก็บไว้ข้าม build — ถ้าเน็ตหลุดกลางทาง รอบถัดไปไม่ต้องโหลดใหม่ทั้งหมด (~3 GB)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries 10 --timeout 120 torch torchvision --index-url ${TORCH_INDEX}
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries 10 --timeout 120 -r requirements.txt
 
 COPY engine/ engine/
 COPY backend/ backend/
