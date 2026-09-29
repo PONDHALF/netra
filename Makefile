@@ -11,7 +11,7 @@ COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help setup models sample api web build try bench synth-preview clean typhoon api-typhoon bench-typhoon docker \
-	ssh-key remote-setup deploy remote-sample remote-train remote-train-status remote-train-stop remote-train-fetch remote-status remote-logs remote-open _need-remote
+	ssh-key remote-setup deploy remote-restart-docker remote-sample remote-train remote-train-status remote-train-stop remote-train-fetch remote-status remote-logs remote-open _need-remote
 
 help:             ## แสดงคำสั่งทั้งหมด
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -124,6 +124,12 @@ remote-train-fetch: _need-remote ## ดึงโมเดลที่ดีท�
 	@mkdir -p data/train/platenet
 	@mkdir -p data/train/$(TRAIN_RUN)
 	scp -o ConnectTimeout=15 "$(WIN_USER)@$(WIN_HOST):/$(subst \,/,$(WIN_DIR))/data/train/$(TRAIN_RUN)/best.pt" data/train/$(TRAIN_RUN)/best.pt
+
+remote-restart-docker: _need-remote ## รีสตาร์ท Docker Desktop + WSL บน Windows (ใช้ค่า .wslconfig ใหม่ เช่น RAM limit)
+	$(SSH) "del /q \"$(WIN_DIR)\\data\\restart-docker.log\" 2>nul & schtasks /run /tn NETRA-RestartDocker"
+	@until $(SSH) "type \"$(WIN_DIR)\\data\\restart-docker.log\"" 2>/dev/null | grep -q RESTART-DONE; do sleep 10; done
+	@$(SSH) "type \"$(WIN_DIR)\\data\\restart-docker.log\""
+	$(SSH) "cd /d $(WIN_DIR) && $(COMPOSE_GPU) up -d"
 
 remote-status: _need-remote ## ดูสถานะ container และ GPU บน Windows
 	$(SSH) "cd /d $(WIN_DIR) && git log --oneline -1 && $(COMPOSE_GPU) ps && nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv"
