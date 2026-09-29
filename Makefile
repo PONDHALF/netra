@@ -6,7 +6,7 @@ SAMPLE := data/samples/yt_1min.mp4
 # เครื่องประมวลผล Windows (ผ่าน Tailscale) — ตั้งค่าใน .deploy.env (ไม่อยู่ใน git)
 -include .deploy.env
 WIN_DIR ?= C:\netra
-SSH = ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 $(WIN_USER)@$(WIN_HOST)
+SSH = ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=30 $(WIN_USER)@$(WIN_HOST)
 COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
 .DEFAULT_GOAL := help
