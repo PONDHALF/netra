@@ -26,6 +26,7 @@ INPUT_H, INPUT_W = 64, 192
 
 _CHAR_TO_IDX = {c: i + 1 for i, c in enumerate(ALPHABET)}
 _PLATE_RE = re.compile(rf"^(\d?)([{THAI_CONSONANTS}]{{1,3}})(\d{{1,4}})$")
+_DIGIT_PLATE_RE = re.compile(r"^(\d{2})(\d{4})$")  # ป้ายรถบรรทุก/บัส (เหลือง) ไม่มีหมวดอักษร เช่น 70-6843
 
 
 def encode(text: str) -> list[int]:
@@ -34,10 +35,11 @@ def encode(text: str) -> list[int]:
 
 
 def format_plate(raw: str) -> tuple[str, bool]:
-    """"1กข1234" → ("1กข 1234", ตรงรูปแบบหรือไม่)."""
+    """"1กข1234" → ("1กข 1234", True), "706843" → ("70-6843", True) (ป้ายรถบรรทุก/บัส)."""
     m = _PLATE_RE.match(raw)
     if not m:
-        return raw, False
+        d = _DIGIT_PLATE_RE.match(raw)
+        return (f"{d.group(1)}-{d.group(2)}", True) if d else (raw, False)
     p, letters, num = m.groups()
     return f"{p}{letters} {num}", len(letters) <= 2
 

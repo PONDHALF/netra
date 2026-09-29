@@ -176,6 +176,7 @@ def evaluate(model, data, device, bs: int = 256) -> dict:
             prov = prov.float().argmax(1).cpu().numpy()
             for (im, truth, ptruth), lg, pp in zip(chunk, logits, prov):
                 raw, _ = ctc_greedy(lg)
+                truth = truth.replace("-", "")
                 t_ok, p_ok = raw == truth, int(pp) == ptruth
                 text_ok += t_ok
                 prov_ok += p_ok
@@ -285,7 +286,9 @@ def main() -> None:
             dv = evaluate(model, det_val, device) if det_val else r
             rp = evaluate(model, rp_val, device) if rp_val else None
             # เลือกโมเดลจากภาพที่ตัวตรวจจับตัดเอง (แบบใช้งานจริง) ก่อน แล้วค่อยดูภาพที่ตัดไว้ให้
-            key = (dv["both"] + r["both"], dv["plate_text"] + r["plate_text"] + (rp["plate_text"] if rp else 0),
+            # เลือกโมเดลจาก: ป้ายจริงที่เฉลยจากคน (ชุดทดสอบใหม่ ใหญ่และเชื่อถือได้ที่สุด) + ภาพที่ตัวตรวจจับตัดเอง + ภาพป้ายที่ตัดไว้
+            key = (dv["both"] + r["both"] + (rp["both"] if rp else 0),
+                   dv["plate_text"] + r["plate_text"] + (rp["plate_text"] if rp else 0),
                    dv["char_acc"] + r["char_acc"])
             rec = {"step": step, "loss": round(loss_ema, 4), "lr": sched.get_last_lr()[0], "real": r, "det": dv, "rp": rp, "synth": s,
                    "img_per_s": round(seen / (time.time() - t0)), "time": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -300,7 +303,7 @@ def main() -> None:
             print(f"== step {step}  ป้ายจริง(ตัดให้): เลข {r['plate_text']:.1%} จังหวัด {r['province']:.1%} "
                   f"ทั้งคู่ {r['both']:.1%} | ป้ายจริง(ตัวตรวจจับตัด): เลข {dv['plate_text']:.1%} "
                   f"จังหวัด {dv['province']:.1%} ทั้งคู่ {dv['both']:.1%} | จำลอง: เลข {s['plate_text']:.1%}"
-                  + (f" | ป้ายจริงชุดใหม่(test): เลข {rp['plate_text']:.1%}" if rp else "")
+                  + (f" | ป้ายจริงชุดใหม่ {len(rp_val)} ป้าย: เลข {rp['plate_text']:.1%} จังหวัด {rp['province']:.1%}" if rp else "")
                   + ("  ★ best" if improved else ""), flush=True)
             torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                         "step": step, "best_key": list(best_key)}, OUT / "last.pt")
