@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 
 import cv2
@@ -140,6 +141,7 @@ class PlateReader:
         return r
 
     # นโยบายรวมผล — เลือกจากการเทียบบนป้ายจริง (training/plate_ocr/compare.py)
+    TIE = os.getenv("NETRA_ENSEMBLE_TIE", "conf")  # ขัดแย้งกัน → conf (ตัวที่มั่นใจกว่า) | platenet | char
     PROVINCE_MIN_CONF = 0.3   # จังหวัดจาก PlateNet ต่ำกว่านี้ → ใช้ของ char-OCR ถ้ามี (0.3 ดีที่สุดใน compare.py)
 
     def _read_ensemble(self, plate_img: np.ndarray) -> PlateReading:
@@ -151,12 +153,15 @@ class PlateReader:
         c_valid = bool(c and c.valid)
         if p.valid and c_valid and norm(p.text) == norm(c.text):
             text, valid, conf, source, agree = p.text, True, max(p.conf, c.conf, 0.9), "platenet+char", True
-        elif c_valid:
-            # ขัดแย้ง → ใช้ char-OCR: บนภาพที่ตัวตรวจจับตัดเอง (มีกรอบป้าย/พื้นที่รอบๆ เยอะ) char-OCR แม่นกว่า
-            # (e2e: char 50% vs PlateNet 35%) — ลดความมั่นใจให้ Typhoon ตัดสินได้ถ้าเปิดไว้
-            text, valid, conf, source, agree = c.text, True, min(c.conf, 0.45 if p.valid else c.conf), "char-ocr", False
+        elif p.valid and c_valid:
+            # ขัดแย้ง: ตามนโยบาย (NETRA_ENSEMBLE_TIE) — ลดความมั่นใจให้ Typhoon ตัดสินได้ถ้าเปิดไว้
+            use_p = self.TIE == "platenet" or (self.TIE == "conf" and p.conf >= c.conf)
+            text, conf, source = (p.text, p.conf, "platenet") if use_p else (c.text, c.conf, "char-ocr")
+            valid, conf, agree = True, min(conf, 0.45), False
         elif p.valid:
-            text, valid, conf, source, agree = p.text, True, min(p.conf, 0.45), "platenet", False
+            text, valid, conf, source, agree = p.text, True, p.conf, "platenet", False
+        elif c_valid:
+            text, valid, conf, source, agree = c.text, True, c.conf, "char-ocr", False
         else:
             text, valid, conf, source, agree = p.text or (c.text if c else None), False, 0.0, "platenet", False
         province = p.province

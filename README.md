@@ -108,6 +108,25 @@ make api-typhoon   # รัน backend โดยเปิด Typhoon (หรื�
 python training/train_plate.py --data path/to/data.yaml          # หรือ --roboflow <workspace>/<project>/<version>
 ```
 
+## PlateNet — ตัวอ่านป้ายที่เทรนเอง
+CRNN + CTC อ่านเลขทะเบียนทั้งแถว + หัวจำแนก 77 จังหวัด (2.35M พารามิเตอร์, ~5 ms/ป้าย) — เทรนด้วย**ป้ายจำลองล้วน**
+(`training/plate_ocr/synth.py`: ป้ายหลายแบบ/สี, กรอบป้าย, พื้นที่รอบป้าย, เบลอ, ความละเอียดต่ำ, ฟอนต์ OFL จาก Google Fonts)
+
+ใช้คู่กับ char-OCR: อ่านตรงกัน → มั่นใจสูง (ถูก 94%), ขัดแย้ง → เชื่อตัวที่มั่นใจกว่า (`NETRA_ENSEMBLE_TIE`), จังหวัดจาก PlateNet
+
+| ป้ายจริง thai-parking-100 | ก่อนมี PlateNet | PlateNet + char-OCR |
+|---|---|---|
+| ภาพป้ายที่ตัดไว้: เลข / จังหวัด / ทั้งคู่ | 73 / 63 / 50% | **81 / 83 / 68%** |
+| ภาพเต็ม (ตัวตรวจจับตัดเอง): เลข / จังหวัด / ทั้งคู่ | 51 / 53 / 34% | 47 / **72** / **39%** |
+
+```bash
+make remote-train TRAIN_ARGS="--run platenet --steps 60000"             # เทรนบน Windows (GPU) ~2.5 ชม.
+make remote-train TRAIN_ARGS="--run ft2 --init engine/models/platenet.pt --steps 5000 --lr 5e-4"  # fine-tune
+make remote-train-status TRAIN_RUN=ft2                                  # ดูผล
+python -m training.plate_ocr.compare --model data/train/ft2/best.pt     # เทียบวิธีรวมผลกับ char-OCR
+```
+ไฟล์โมเดลอยู่ที่ `engine/models/platenet.pt` (ไม่อยู่ใน git) — ข้อควรรู้: เลือกโมเดลจากชุดป้ายจริงชุดเดียวกับที่วัดผล ตัวเลขจึงอาจสูงกว่าความจริงเล็กน้อย
+
 ## วัดความแม่นยำ
 ```bash
 make bench     # ชุดทดสอบ thai-parking-100 (ภาพกล้องลานจอดจริง 100 ภาพพร้อมเฉลย) — ดาวน์โหลดอัตโนมัติ
@@ -131,6 +150,8 @@ make bench     # ชุดทดสอบ thai-parking-100 (ภาพกล้�
 | `NETRA_DATA` | `./data` | ที่เก็บข้อมูล |
 | `NETRA_PLATE_MODEL` | `engine/models/plate.pt` | โมเดลตรวจจับป้าย |
 | `NETRA_PLATE_OCR_MODEL` | `engine/models/plate_ocr.pt` | โมเดลอ่านป้ายรายตัวอักษร |
+| `NETRA_PLATENET_MODEL` | `engine/models/platenet.pt` | ตัวอ่านป้ายที่เทรนเอง (ถ้ามีไฟล์จะใช้คู่กับ char-OCR) |
+| `NETRA_ENSEMBLE_TIE` | `conf` | PlateNet กับ char-OCR อ่านไม่ตรงกัน → `conf` ตัวที่มั่นใจกว่า / `platenet` / `char` |
 | `NETRA_OCR_GPU` | `auto` | EasyOCR ใช้ GPU หรือไม่ — auto: CPU บนการ์ด NVIDIA (ประหยัด VRAM), GPU บน Mac |
 | `NETRA_TRT` | `auto` | ใช้ TensorRT กับ YOLO บนการ์ด NVIDIA (แปลงอัตโนมัติครั้งแรก) |
 | `NETRA_THREADS` | min(8, cores) | จำนวน thread ของ PyTorch/OpenCV |
