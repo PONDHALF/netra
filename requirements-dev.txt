@@ -1,0 +1,3 @@
+# เครื่องมือสำหรับเครื่องพัฒนา (Mac) — ไม่ได้ติดตั้งใน Docker
+-r requirements.txt
+yt-dlp            # make sample: ดาวน์โหลดคลิปทดสอบจาก YouTube

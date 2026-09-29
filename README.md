@@ -3,24 +3,26 @@
 **N**eural **E**ngine for **T**racking & **R**ecognition of **A**utomobiles
 ระบบตรวจจับรถ อ่านป้ายทะเบียนไทย และบันทึกภาพรถอัตโนมัติ จากไฟล์วิดีโอกล้องวงจรปิด (ดูแผนเต็มใน [plan.md](plan.md))
 
-## เริ่มใช้งาน
+## เครื่องที่ใช้
 
-> **รันบน Windows + การ์ดจอ NVIDIA** → ดูคู่มือ [docs/WINDOWS.md](docs/WINDOWS.md) (ดับเบิลคลิก `windows\start.bat`)
+| เครื่อง | หน้าที่ | วิธีใช้ |
+|---|---|---|
+| **Mac** (Apple Silicon, RAM 16 GB) | **พัฒนา** — แก้โค้ด ทดสอบกับคลิปสั้น วัดความแม่นยำ | `make` (ดูด้านล่าง) → `git push` |
+| **Windows** (RTX 3060 12 GB, RAM 128 GB) | **ประมวลผลจริง** — วิดีโอยาว, Typhoon OCR, สาธิต | Docker + `windows\*.bat` → คู่มือ [docs/WINDOWS.md](docs/WINDOWS.md) |
 
-### แบบ Docker (คำสั่งเดียว)
+โค้ดอยู่ที่ GitHub (private) `PONDHALF/netra` — แก้บน Mac แล้ว `git push`, บน Windows ดับเบิลคลิก `windows\update.bat`
+
+## พัฒนาบน Mac
 ```bash
-docker compose up --build                 # CPU
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build   # NVIDIA GPU
+make setup     # ครั้งแรก: .venv (Python 3.12) + npm install + ดาวน์โหลดโมเดล
+make sample    # ดาวน์โหลดคลิปทดสอบ 1 นาที → data/samples/yt_1min.mp4
+make api       # backend + เว็บ → http://localhost:8000   (make web = หน้าเว็บแบบ hot reload ที่ :5173)
+make try       # ทดสอบ engine กับคลิป 1 นาทีโดยไม่ต้องเปิดเว็บ
+make bench     # วัดความแม่นยำบนชุดทดสอบ 100 ภาพ
+make clean     # ล้างข้อมูลทดสอบ (วิดีโอที่อัปโหลด ผลลัพธ์ ฐานข้อมูล)
+make help      # ดูคำสั่งทั้งหมด
 ```
-เปิด http://localhost:8000 — ครั้งแรกจะดาวน์โหลดโมเดล YOLO11s และ EasyOCR (~150 MB) อัตโนมัติ
-
-### แบบพัฒนา (macOS / Linux)
-```bash
-make setup     # สร้าง .venv (Python 3.12) + npm install + ดาวน์โหลดโมเดลป้ายไทย
-make api       # backend  → http://localhost:8000
-make web       # frontend → http://localhost:5173 (hot reload, proxy ไป :8000)
-```
-หรือ `make build` แล้วเปิดที่ :8000 อย่างเดียว
+Typhoon OCR 3B (~7.5 GB) ไม่ได้ติดตั้งบน Mac เพราะแรม 16 GB ไม่พอรันคู่กับ YOLO — ทดสอบ Typhoon บนเครื่อง Windows
 
 ### ประมวลผลผ่านคำสั่ง (ไม่ต้องเปิดเว็บ)
 ```bash
@@ -30,17 +32,22 @@ make web       # frontend → http://localhost:5173 (hot reload, proxy ไป :8
 
 ## โครงสร้าง
 ```
-engine/                 AI pipeline
-  pipeline.py           อ่านเฟรม → detect+track → หาป้าย → เลือกเฟรมชัดสุด (top-3) → OCR+vote → วาดกรอบ → H.264
-  detectors.py          YOLO11s + ByteTrack (รถ), YOLO11n (ป้าย — ถ้ามี plate.pt)
-  ocr.py                อ่านป้าย: โมเดลรายตัวอักษร → EasyOCR เติมส่วนที่ขาด
-  fetch_models.py       ดาวน์โหลดโมเดลจาก Hugging Face อย่างปลอดภัย
-  postprocess/          รูปแบบป้ายไทย, แก้ตัวที่สับสน (ไ→1, O→0, เลขไทย), 77 จังหวัด (fuzzy), vote หลายเฟรม
-  models/               yolo11s.pt (ดาวน์โหลดอัตโนมัติ), plate.pt (เทรนเอง)
+engine/                 AI pipeline (ใช้ร่วมกันทั้ง Mac และ Windows)
+  pipeline.py           อ่านเฟรม → detect+track → หาป้าย → เลือกเฟรมชัดสุด → OCR+vote → (Typhoon อ่านซ้ำ) → วาดกรอบ → H.264
+  detectors.py          YOLO11s + ByteTrack (รถ), ตรวจจับป้าย (plate.pt)
+  ocr.py                อ่านป้าย: โมเดลรายตัวอักษร (plate_ocr.pt) → EasyOCR เติมส่วนที่ขาด
+  typhoon.py            Typhoon OCR 3B — อ่านซ้ำหลังวิเคราะห์ (ทางเลือก)
+  fetch_models.py       ดาวน์โหลดโมเดล: ตรึงเวอร์ชัน + ตรวจ SHA-256 + สแกน pickle
+  postprocess/          รูปแบบป้ายไทย, 77 จังหวัด (fuzzy), แปลงรหัสตัวอักษร, vote หลายเฟรม
+  models/               *.pt (ไม่อยู่ใน git — make models)
 backend/app/            FastAPI + SQLAlchemy (SQLite) + WebSocket
 frontend/               React + Vite + TypeScript + Tailwind
-training/               train_plate.py, benchmark.py (ชุดทดสอบมาตรฐาน), eval_ocr.py (ข้อมูลที่แก้ด้วยมือ)
-data/                   uploads/, outputs/<job>/, corrections/, netra.db
+training/               benchmark.py, eval_typhoon.py, eval_ocr.py, train_plate.py, make_demo_video.py
+windows/                สคริปต์ .bat สำหรับเครื่องประมวลผล Windows (start / update / stop / logs / check-gpu)
+docs/WINDOWS.md         คู่มือติดตั้งบน Windows + NVIDIA
+data/                   (ไม่อยู่ใน git) uploads/, outputs/<job>/, corrections/, netra.db, samples/, benchmark/
+requirements.txt        dependency ของระบบ (Docker ใช้ไฟล์นี้)
+requirements-dev.txt    + เครื่องมือของเครื่องพัฒนา (yt-dlp)
 ```
 
 ## API
