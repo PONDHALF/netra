@@ -39,7 +39,10 @@ FONT_DIR = ROOT / "data" / "fonts"
 IGNORE = -100  # ไม่มีคำตอบจังหวัด → ไม่คิด loss ส่วนจังหวัด
 
 
-def load_real_rows(dirs: list[str], split: str) -> list[tuple[str, str, int]]:
+REAL_STATUSES = ("auto", "human")  # "auto2" (Typhoon ตัดสิน) ตรวจแล้วผิด ~10% (ฒ↔ต) — ไม่ใช้เป็นค่าเริ่มต้น
+
+
+def load_real_rows(dirs: list[str], split: str, statuses=REAL_STATUSES) -> list[tuple[str, str, int]]:
     """ป้ายจริงที่มีคำตอบแล้ว (auto / auto2 / human) จาก labels.csv ของ training/plate_ocr/realdata.py."""
     import csv as _csv
 
@@ -47,10 +50,10 @@ def load_real_rows(dirs: list[str], split: str) -> list[tuple[str, str, int]]:
     for d in dirs:
         base = ROOT / d
         for r in _csv.DictReader(open(base / "labels.csv", encoding="utf-8")):
-            if r["split"] != split or r["status"] not in ("auto", "auto2", "human") or not r["text"]:
+            if r["split"] != split or r["status"] not in statuses or not r["text"]:
                 continue
             prov = PROVINCE_CLASSES.index(r["province"]) if r["province"] in PROVINCE_CLASSES else IGNORE
-            out.append((str(base / r["file"]), r["text"], prov))
+            out.append((str(base / r["file"]), r["text"].replace("-", ""), prov))
     return out
 
 
@@ -205,6 +208,8 @@ def main() -> None:
     ap.add_argument("--run", default="platenet", help="ชื่อโฟลเดอร์ผลลัพธ์ใน data/train/ (แยกแต่ละรอบการเทรน)")
     ap.add_argument("--real", action="append", default=[], help="โฟลเดอร์ป้ายจริง (มี labels.csv) ใส่ได้หลายครั้ง")
     ap.add_argument("--real-ratio", type=float, default=0.35, help="สัดส่วนป้ายจริงในแต่ละ batch")
+    ap.add_argument("--real-status", default=",".join(REAL_STATUSES),
+                    help="ใช้ป้ายจริงสถานะไหนบ้าง (auto=ตัวอ่านตรงกัน, auto2=Typhoon ตัดสิน, human=คนติด)")
     ap.add_argument("--init", default=None, help="เริ่มจากน้ำหนักของ checkpoint นี้ (fine-tune) เช่น engine/models/platenet.pt")
     args = ap.parse_args()
 
@@ -247,8 +252,10 @@ def main() -> None:
 
     real, synth_val = load_real(), load_synth_val()
     det_val = load_det_crops()
-    real_train = load_real_rows(args.real, "train") if args.real else []
-    rp_val = [(cv2.imread(p), t, pv) for p, t, pv in load_real_rows(args.real, "test")] if args.real else []
+    st = tuple(args.real_status.split(","))
+    real_train = load_real_rows(args.real, "train", st) if args.real else []
+    # ชุดทดสอบใช้เฉพาะเฉลยจากคน (human) — เชื่อถือได้ที่สุด
+    rp_val = [(cv2.imread(p), t, pv) for p, t, pv in load_real_rows(args.real, "test", ("human",))] if args.real else []
     params = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"device={device} workers={workers} batch={args.batch} steps={args.steps} params={params:.2f}M "
           f"real_val={len(real)} det_val={len(det_val)} synth_val={len(synth_val)} "
