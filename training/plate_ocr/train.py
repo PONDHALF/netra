@@ -62,6 +62,8 @@ class SynthStream(torch.utils.data.IterableDataset):
     ป้ายจริงถูกทำให้เสื่อมแบบเดียวกับป้ายจำลอง (ภาพใน dataset ชัดกว่ากล้องวงจรปิดมาก)."""
 
     def __init__(self, seed: int, real: list | None = None, real_ratio: float = 0.0):
+        """real: [(ภาพ RGB uint8, เลขทะเบียน, จังหวัด)] — โหลดครั้งเดียวใน process หลักก่อนแยก worker
+        (fork แชร์หน่วยความจำแบบอ่านอย่างเดียว) — ห้ามให้แต่ละ worker cache เอง: เคยทำให้แรมโตจน OOM ที่ ~step 5000"""
         self.seed, self.real, self.real_ratio = seed, real or [], real_ratio
 
     def __iter__(self):
@@ -70,15 +72,12 @@ class SynthStream(torch.utils.data.IterableDataset):
         rng = random.Random(self.seed * 1000 + wid)
         np.random.seed((self.seed * 1000 + wid) % 2**32)
         fonts = available_fonts(FONT_DIR)
-        cache: dict[str, np.ndarray] = {}
+        from PIL import Image
+
         while True:
             if self.real and rng.random() < self.real_ratio:
-                path, text, prov = rng.choice(self.real)
-                if path not in cache:
-                    cache[path] = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-                from PIL import Image
-
-                img_u8 = degrade(rng, Image.fromarray(cache[path]))
+                rgb, text, prov = self.real[rng.randrange(len(self.real))]
+                img_u8 = degrade(rng, Image.fromarray(rgb))
             else:
                 s = make_sample(rng, fonts)
                 img_u8, text, prov = s.image, s.text, s.province
@@ -253,7 +252,19 @@ def main() -> None:
     real, synth_val = load_real(), load_synth_val()
     det_val = load_det_crops()
     st = tuple(args.real_status.split(","))
-    real_train = load_real_rows(args.real, "train", st) if args.real else []
+    real_rows = load_real_rows(args.real, "train", st) if args.real else []
+    # โหลดภาพป้ายจริงทั้งหมดครั้งเดียว (ย่อให้ด้านยาว ≤ 256 px) — worker ใช้ร่วมกันผ่าน fork
+    real_train = []
+    for path, text, prov in real_rows:
+        im = cv2.imread(path)
+        if im is None:
+            continue
+        s_ = 256 / max(im.shape[:2])
+        if s_ < 1:
+            im = cv2.resize(im, (int(im.shape[1] * s_), int(im.shape[0] * s_)), interpolation=cv2.INTER_AREA)
+        real_train.append((np.ascontiguousarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)), text, prov))
+    if real_train:
+        print(f"โหลดป้ายจริง {len(real_train)} ภาพ ({sum(x[0].nbytes for x in real_train) / 1e9:.1f} GB)", flush=True)
     # ชุดทดสอบใช้เฉพาะเฉลยจากคน (human) — เชื่อถือได้ที่สุด
     rp_val = [(cv2.imread(p), t, pv) for p, t, pv in load_real_rows(args.real, "test", ("human",))] if args.real else []
     params = sum(p.numel() for p in model.parameters()) / 1e6

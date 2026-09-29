@@ -109,7 +109,8 @@ remote-sample: _need-remote ## คัดลอกคลิปทดสอบไ�
 TRAIN_ARGS ?=
 remote-train: _need-remote ## เทรน PlateNet บน Windows (GPU) เบื้องหลัง — ดูผล: make remote-train-status  (ส่งค่าเพิ่ม: TRAIN_ARGS="--steps 30000")
 	git push
-	$(SSH) "cd /d $(WIN_DIR) && git pull --ff-only && $(COMPOSE_GPU) --profile train run -d --rm --name netra-train trainer python -m training.plate_ocr.train $(TRAIN_ARGS)"
+	@# ไม่ใช้ --rm: ถ้าเทรนล้ม log ยังอยู่ให้ดูได้ (docker logs netra-train) — ลบตัวเก่าก่อนเริ่มรอบใหม่
+	$(SSH) "cd /d $(WIN_DIR) && git pull --ff-only && (docker rm -f netra-train >nul 2>&1 & $(COMPOSE_GPU) --profile train run -d --name netra-train trainer python -m training.plate_ocr.train $(TRAIN_ARGS))"
 	@echo "✓ เริ่มเทรนแล้ว — ดูความคืบหน้า: make remote-train-status"
 
 TRAIN_RUN ?= platenet
