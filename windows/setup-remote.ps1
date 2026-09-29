@@ -61,10 +61,11 @@ if (-not (Test-Path $sshConfig) -or -not (Select-String -Path $sshConfig -Simple
     Add-Content -Path $sshConfig -Encoding ascii -Value "`nHost github.com`n  IdentityFile ~/.ssh/netra_deploy`n  IdentitiesOnly yes"
 }
 $knownHosts = Join-Path $userSsh "known_hosts"
-if (-not (Test-Path $knownHosts) -or -not (Select-String -Path $knownHosts -SimpleMatch "github.com" -Quiet)) {
-    $hostKey = Invoke-Native "ssh-keyscan -t ed25519 github.com" | Where-Object { $_ -match "^github\.com " }
-    if ($hostKey) { Add-Content -Path $knownHosts -Value $hostKey -Encoding ascii }
-    else { Write-Host "[WARN] could not fetch github.com host key" -ForegroundColor Yellow }
+# GitHub's published ed25519 host key (https://api.github.com/meta, SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU)
+# - pinned instead of ssh-keyscan, which can be spoofed and failed silently on some machines
+$githubKey = "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+if (-not (Test-Path $knownHosts) -or -not (Select-String -Path $knownHosts -SimpleMatch "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" -Quiet)) {
+    Add-Content -Path $knownHosts -Value $githubKey -Encoding ascii
 }
 if (Test-Path (Join-Path $RepoDir ".git")) {
     Invoke-Native "git -C `"$RepoDir`" remote set-url origin git@github.com:PONDHALF/netra.git"
