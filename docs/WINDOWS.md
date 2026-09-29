@@ -101,6 +101,10 @@ make remote-open    # เปิดเว็บ NETRA ของเครื่อ
 | `make deploy` | push โค้ด → Windows git pull + build ใหม่ + รีสตาร์ท (แก้แค่โค้ด ~1–3 นาที) |
 | `make remote-status` | สถานะ container, commit ล่าสุด, การใช้การ์ดจอ |
 | `make remote-logs` | log ล่าสุด 200 บรรทัด |
+| `make remote-restart-docker` | รีสตาร์ท Docker + WSL (หลังแก้ `.wslconfig` เช่นขยาย RAM) |
+
+**RAM ของ Docker**: ตั้งไว้ที่ `C:\Users\<ผู้ใช้>\.wslconfig` (`memory=104GB`, `swap=16GB` สำหรับเครื่อง 128 GB)
+ค่าเริ่มต้นของ WSL คือครึ่งหนึ่งของ RAM — การเทรนที่ใช้ worker เยอะเคยชนเพดาน 64 GB แล้วถูกหยุดกลางทาง
 
 ไฟล์ใน `C:\netra\windows\` ยังใช้ได้ถ้านั่งหน้าเครื่อง Windows:
 `start.bat` (ไม่ใช้ Typhoon) · `start-typhoon.bat` · `update.bat` · `stop.bat` · `logs.bat` · `check-gpu.bat`

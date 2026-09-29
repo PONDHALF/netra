@@ -84,7 +84,10 @@ $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ("/c `"" + (Join-
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -AllowStartIfOnBatteries
 Register-ScheduledTask -TaskName "NETRA-Deploy" -Action $action -Principal $principal -Settings $settings -Force | Out-Null
-Write-Host "task registered"
+# Restart Docker Desktop + WSL from the Mac (make remote-restart-docker) - applies .wslconfig changes
+$rAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument ("-NoProfile -ExecutionPolicy Bypass -File `"" + (Join-Path $RepoDir "windows\restart-docker.ps1") + "`"")
+Register-ScheduledTask -TaskName "NETRA-RestartDocker" -Action $rAction -Principal $principal -Force | Out-Null
+Write-Host "tasks registered (NETRA-Deploy, NETRA-RestartDocker)"
 
 $tsIp = ""
 try { $tsIp = (Invoke-Native "tailscale ip -4" | Select-Object -First 1) } catch {}
