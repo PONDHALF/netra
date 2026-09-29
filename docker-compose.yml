@@ -23,5 +23,18 @@ services:
       - ./data/samples:/samples:ro
     restart: unless-stopped
 
+  # เทรนโมเดลอ่านป้าย (PlateNet) — ใช้ image เดียวกับระบบ, mount โค้ดทั้งโปรเจกต์ จึงไม่ต้อง build ใหม่เมื่อแก้สคริปต์เทรน
+  # เริ่มจาก Mac: make remote-train  (ไม่ได้รันตอน docker compose up ปกติ เพราะอยู่ใน profile "train")
+  trainer:
+    image: netra:phase1
+    profiles: ["train"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - netra-cache:/cache
+    shm_size: "8gb"              # DataLoader หลาย worker ส่งภาพผ่าน shared memory (ค่าเริ่มต้น 64 MB ไม่พอ)
+    environment:
+      - PYTHONUNBUFFERED=1
+
 volumes:
   netra-cache:

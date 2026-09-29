@@ -11,7 +11,7 @@ COMPOSE_GPU := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help setup models sample api web build try bench clean typhoon api-typhoon bench-typhoon docker \
-	ssh-key remote-setup deploy remote-sample remote-status remote-logs remote-open _need-remote
+	ssh-key remote-setup deploy remote-sample remote-train remote-train-status remote-train-stop remote-train-fetch remote-status remote-logs remote-open _need-remote
 
 help:             ## แสดงคำสั่งทั้งหมด
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -101,6 +101,22 @@ remote-sample: _need-remote ## คัดลอกคลิปทดสอบไ�
 	@test -f $(SAMPLE) || $(MAKE) sample
 	$(SSH) "if not exist \"$(WIN_DIR)\\data\\samples\" mkdir \"$(WIN_DIR)\\data\\samples\""
 	scp -o ConnectTimeout=15 $(SAMPLE) "$(WIN_USER)@$(WIN_HOST):/$(subst \,/,$(WIN_DIR))/data/samples/yt_1min.mp4"
+
+TRAIN_ARGS ?=
+remote-train: _need-remote ## เทรน PlateNet บน Windows (GPU) เบื้องหลัง — ดูผล: make remote-train-status  (ส่งค่าเพิ่ม: TRAIN_ARGS="--steps 30000")
+	git push
+	$(SSH) "cd /d $(WIN_DIR) && git pull --ff-only && $(COMPOSE_GPU) --profile train run -d --rm --name netra-train trainer python -m training.plate_ocr.train $(TRAIN_ARGS)"
+	@echo "✓ เริ่มเทรนแล้ว — ดูความคืบหน้า: make remote-train-status"
+
+remote-train-status: _need-remote ## ดูความคืบหน้าการเทรน (log ล่าสุด + ผลวัดบนป้ายจริง)
+	@$(SSH) "docker logs --tail 4 netra-train 2>&1 & echo --- ผลวัด (ป้ายจริง / จำลอง): & powershell -NoProfile -Command \"if (Test-Path '$(WIN_DIR)\\data\\train\\platenet\\log.jsonl') { Get-Content '$(WIN_DIR)\\data\\train\\platenet\\log.jsonl' -Tail 8 }\""
+
+remote-train-stop: _need-remote ## หยุดการเทรน (เทรนต่อได้ด้วย TRAIN_ARGS=--resume)
+	$(SSH) "docker stop netra-train"
+
+remote-train-fetch: _need-remote ## ดึงโมเดลที่ดีที่สุดจาก Windows มาไว้ที่ Mac (data/train/platenet/best.pt)
+	@mkdir -p data/train/platenet
+	scp -o ConnectTimeout=15 "$(WIN_USER)@$(WIN_HOST):/$(subst \,/,$(WIN_DIR))/data/train/platenet/best.pt" data/train/platenet/best.pt
 
 remote-status: _need-remote ## ดูสถานะ container และ GPU บน Windows
 	$(SSH) "cd /d $(WIN_DIR) && git log --oneline -1 && $(COMPOSE_GPU) ps && nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv"
