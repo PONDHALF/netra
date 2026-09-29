@@ -33,13 +33,24 @@ class ModelSpec:
     sha256: str
     license: str
     note: str
+    url_override: str | None = None
 
     @property
     def url(self) -> str:
-        return f"https://huggingface.co/{self.repo}/resolve/{self.revision}/{self.filename}"
+        return self.url_override or f"https://huggingface.co/{self.repo}/resolve/{self.revision}/{self.filename}"
 
 
 MODELS = [
+    ModelSpec(
+        target="yolo11s.pt",
+        repo="ultralytics/assets",
+        revision="v8.3.0",
+        filename="yolo11s.pt",
+        sha256="85a76fe86dd8afe384648546b56a7a78580c7cb7b404fc595f97969322d502d5",
+        license="AGPL-3.0",
+        note="ตรวจจับรถ (YOLO11s, COCO)",
+        url_override="https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt",
+    ),
     ModelSpec(
         target="plate.pt",
         repo="tanawichsingpae/thai-license-plate-detector",
@@ -104,11 +115,19 @@ def fetch(spec: ModelSpec, force: bool = False) -> Path:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part")
     print(f"↓ {spec.target} ← {spec.repo} ({spec.note}, {spec.license})")
-    urllib.request.urlretrieve(spec.url, tmp)
-    digest = sha256(tmp)
+    digest = ""
+    for attempt in range(1, 4):  # เครือข่ายหลุดกลางทาง → ลองใหม่ (ไฟล์ไม่ครบจะ hash ไม่ตรง)
+        try:
+            urllib.request.urlretrieve(spec.url, tmp)
+            digest = sha256(tmp)
+            if digest == spec.sha256:
+                break
+            print(f"  ! {spec.target}: hash ไม่ตรง (ครั้งที่ {attempt}) — ลองใหม่")
+        except OSError as e:
+            print(f"  ! {spec.target}: ดาวน์โหลดไม่สำเร็จ (ครั้งที่ {attempt}): {e}")
     if digest != spec.sha256:
         tmp.unlink(missing_ok=True)
-        raise RuntimeError(f"{spec.target}: SHA-256 ไม่ตรง ({digest}) — ไฟล์ต้นทางอาจถูกเปลี่ยน")
+        raise RuntimeError(f"{spec.target}: ดาวน์โหลดไม่ครบหรือ SHA-256 ไม่ตรง ({digest or 'ไม่มีไฟล์'})")
     bad = scan_pickle(tmp)
     if bad:
         tmp.unlink(missing_ok=True)
