@@ -79,7 +79,7 @@ class VehicleTracker:
 
     def track(self, frame: np.ndarray) -> list[tuple[int, str, Box]]:
         # แปลง tensor → numpy ภายใน lock ด้วย (.cpu() ก็ใช้ GPU)
-        with locks.guard(self._lock):
+        with locks.guard(self._lock, exclusive=locks.needs_setup(self.model)):
             res = self._track(frame)
             if res.boxes is None or res.boxes.id is None:
                 return []
@@ -121,7 +121,7 @@ class PlateDetector:
     def detect(self, frame: np.ndarray) -> list[Box]:
         if self.model is None:
             return []
-        with locks.guard(self._lock):
+        with locks.guard(self._lock, exclusive=locks.needs_setup(self.model)):
             res = self.model.predict(frame, conf=self.cfg.plate_conf, imgsz=self.cfg.plate_imgsz,
                                      device=self.cfg.device, verbose=False)[0]
             if res.boxes is None:

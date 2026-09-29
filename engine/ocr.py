@@ -56,7 +56,7 @@ class CharPlateOCR:
         self._lock = threading.Lock()
 
     def read(self, img: np.ndarray) -> PlateReading:
-        with locks.guard(self._lock):
+        with locks.guard(self._lock, exclusive=locks.needs_setup(self.model)):
             res = self.model.predict(img, conf=self.conf, imgsz=self.imgsz, device=self.device, verbose=False)[0]
             boxes, cls, conf = res.boxes.xyxy.tolist(), res.boxes.cls.tolist(), res.boxes.conf.tolist()
         names = self.model.names

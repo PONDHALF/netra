@@ -382,7 +382,7 @@ class Engine:
             if c.plate is not None:
                 r, pbox = self.reader.read_plate(c.plate), c.plate_box
             else:
-                r, pbox = self.reader.find_and_read(c.car)
+                r, pbox = self._read_car(c.car)
             readings.append(r)
             boxes.append(pbox)
         result = vote(readings)
@@ -422,6 +422,20 @@ class Engine:
             ocr_raw=result.raw, votes=int(result.extras.get("votes", 0)),
             ocr_engine=(readings[best_i].extras.get("source", "char-ocr") if result.text else ""), key=tr.key,
         )
+
+    def _read_car(self, car: np.ndarray):
+        """ไม่เจอป้ายในภาพเต็มเฟรม: ให้ตัวตรวจจับป้าย (GPU) หาในภาพรถ — ภาพรถถูกขยาย ป้ายเล็กจึงเห็นชัดขึ้น
+        เร็วกว่า EasyOCR บน CPU (find_and_read) หลายสิบเท่า ซึ่งเคยกินเวลา ~70% ของงานวิดีโอแต่แทบไม่เคยอ่านได้."""
+        if not self.plates.available:
+            return self.reader.find_and_read(car)
+        from .postprocess import PlateReading
+
+        boxes = self.plates.detect(car) if car is not None and car.size else []
+        if not boxes:
+            return PlateReading(), None
+        h, w = car.shape[:2]
+        x1, y1, x2, y2 = _clip(max(boxes, key=lambda b: b.conf), w, h, pad=0.08)
+        return self.reader.read_plate(car[y1:y2, x1:x2]), (x1, y1, x2, y2)
 
     def _render(self, src, dst: Path, fps, total, stride, frame_items, labels, on_progress, should_stop,
                 n_events) -> None:
