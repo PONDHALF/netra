@@ -72,7 +72,7 @@ ssh-key:          ## สร้าง SSH key ของ Mac (ครั้งเ�
 	@test -f ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q -C "netra-mac"
 	@echo "รันบน Windows (PowerShell แบบ Administrator):"
 	@echo ""
-	@echo "(ถ้าโปรเจกต์ไม่ได้อยู่ที่ C:\\netra ให้แก้ path ในคำสั่งให้ตรง)"
+	@echo "(ถ้าโปรเจกต์ไม่ได้อยู่ที่ C:/netra ให้แก้ path ในคำสั่งให้ตรง)"
 	@printf '%s\n' "powershell -ExecutionPolicy Bypass -File C:/netra/windows/setup-remote.ps1 -PublicKey \"$$(cat ~/.ssh/id_ed25519.pub)\""
 
 remote-setup: _need-remote ## เชื่อม Mac กับ Windows: ทดสอบ SSH + เพิ่ม deploy key ของ Windows ใน GitHub
@@ -98,4 +98,4 @@ remote-open:  _need-remote ## เปิดหน้าเว็บ NETRA บน�
 	open http://$(WIN_HOST):8000
 
 _need-remote:
-	@test -n "$(WIN_HOST)" -a -n "$(WIN_USER)" || { echo "ยังไม่ได้ตั้งค่า: สร้างไฟล์ .deploy.env ที่มี"; echo "  WIN_HOST=<Tailscale IP ของ Windows>"; echo "  WIN_USER=<ชื่อผู้ใช้ Windows>"; echo "  WIN_DIR=<โฟลเดอร์ netra บน Windows> (ค่าเริ่มต้น C:\\netra)"; exit 1; }
+	@test -n "$(WIN_HOST)" -a -n "$(WIN_USER)" || { echo "ยังไม่ได้ตั้งค่า: สร้างไฟล์ .deploy.env ที่มี"; echo "  WIN_HOST=<Tailscale IP ของ Windows>"; echo "  WIN_USER=<ชื่อผู้ใช้ Windows>"; echo "  WIN_DIR=<โฟลเดอร์ netra บน Windows> (ค่าเริ่มต้น C:/netra)"; exit 1; }
