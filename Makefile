@@ -83,10 +83,19 @@ remote-setup: _need-remote ## เชื่อม Mac กับ Windows: ทด�
 	@rm -f /tmp/netra_deploy.pub
 	@echo "== ทดสอบ git บน Windows ==" && $(SSH) "cd /d $(WIN_DIR) && git fetch && git status -sb"
 
-deploy: _need-remote ## push โค้ดแล้วสั่ง Windows ให้ git pull + build ใหม่ + รีสตาร์ท
+deploy: _need-remote ## push โค้ด → Windows git pull + build ใหม่ + รีสตาร์ท (แสดง log สด)
 	git push
-	$(SSH) "cd /d $(WIN_DIR) && git pull --ff-only && $(COMPOSE_GPU) up -d --build"
-	@echo "✓ deploy เสร็จ → http://$(WIN_HOST):8000"
+	@# ลบ log เก่าก่อน แล้วสั่ง scheduled task (รันในเซสชัน desktop เพราะ docker build ผ่าน SSH อ่าน credential ไม่ได้)
+	$(SSH) "del /q \"$(WIN_DIR)\\data\\deploy.log\" 2>nul & schtasks /run /tn NETRA-Deploy"
+	@n=0; while :; do sleep 10; \
+	  log=$$($(SSH) "type \"$(WIN_DIR)\\data\\deploy.log\"" 2>/dev/null | tr -d '\r'); \
+	  total=$$(printf '%s\n' "$$log" | wc -l | tr -d ' '); \
+	  if [ -n "$$log" ] && [ $$total -gt $$n ]; then printf '%s\n' "$$log" | tail -n +$$((n+1)); n=$$total; fi; \
+	  case "$$log" in \
+	    *DEPLOY-EXIT=0*) echo "✓ deploy เสร็จ → http://$(WIN_HOST):8000"; exit 0;; \
+	    *DEPLOY-EXIT=1*) echo "✗ deploy ล้มเหลว — ดู log ด้านบน"; exit 1;; \
+	  esac; \
+	done
 
 remote-status: _need-remote ## ดูสถานะ container และ GPU บน Windows
 	$(SSH) "cd /d $(WIN_DIR) && git log --oneline -1 && $(COMPOSE_GPU) ps && nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv"

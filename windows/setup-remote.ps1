@@ -20,14 +20,14 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) { Write-Host "[ERROR] Run PowerShell as Administrator." -ForegroundColor Red; exit 1 }
 
-Write-Host "== 1/5 OpenSSH Server ==" -ForegroundColor Cyan
+Write-Host "== 1/6 OpenSSH Server ==" -ForegroundColor Cyan
 $cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*"
 if ($cap.State -ne "Installed") { Add-WindowsCapability -Online -Name $cap.Name | Out-Null }
 Set-Service -Name sshd -StartupType Automatic
 Start-Service sshd
 Write-Host "sshd running"
 
-Write-Host "== 2/5 Allow the Mac's SSH key ==" -ForegroundColor Cyan
+Write-Host "== 2/6 Allow the Mac's SSH key ==" -ForegroundColor Cyan
 # Administrators use a shared file that must be readable only by Administrators and SYSTEM
 $adminKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
 if (-not (Test-Path $adminKeys) -or -not (Select-String -Path $adminKeys -SimpleMatch $PublicKey -Quiet)) {
@@ -42,7 +42,7 @@ if (-not (Test-Path $userKeys) -or -not (Select-String -Path $userKeys -SimpleMa
 }
 Write-Host "key installed"
 
-Write-Host "== 3/5 Firewall: SSH and NETRA web only from Tailscale (100.64.0.0/10) ==" -ForegroundColor Cyan
+Write-Host "== 3/6 Firewall: SSH and NETRA web only from Tailscale (100.64.0.0/10) ==" -ForegroundColor Cyan
 Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Disable-NetFirewallRule
 foreach ($r in @(@{Name = "NETRA-SSH-Tailscale"; Port = 22}, @{Name = "NETRA-Web-Tailscale"; Port = 8000})) {
     Remove-NetFirewallRule -Name $r.Name -ErrorAction SilentlyContinue
@@ -51,7 +51,7 @@ foreach ($r in @(@{Name = "NETRA-SSH-Tailscale"; Port = 22}, @{Name = "NETRA-Web
 }
 Write-Host "ports 22 and 8000 open to Tailscale devices only"
 
-Write-Host "== 4/5 Read-only GitHub deploy key (so git pull works over SSH) ==" -ForegroundColor Cyan
+Write-Host "== 4/6 Read-only GitHub deploy key (so git pull works over SSH) ==" -ForegroundColor Cyan
 $deployKey = Join-Path $userSsh "netra_deploy"
 if (-not (Test-Path $deployKey)) {
     Invoke-Native "ssh-keygen -t ed25519 -f `"$deployKey`" -N `"`" -q -C netra-windows"
@@ -72,10 +72,19 @@ if (Test-Path (Join-Path $RepoDir ".git")) {
     Write-Host "repo remote switched to SSH"
 }
 
-Write-Host "== 5/5 Keep Typhoon on across deploys ==" -ForegroundColor Cyan
+Write-Host "== 5/6 Keep Typhoon on across deploys ==" -ForegroundColor Cyan
 $envFile = Join-Path $RepoDir ".env"
 if (-not (Test-Path $envFile)) { Set-Content -Path $envFile -Value "NETRA_TYPHOON=1" -Encoding ascii }
 Get-Content $envFile
+
+Write-Host "== 6/6 Scheduled task NETRA-Deploy (make deploy on the Mac starts it) ==" -ForegroundColor Cyan
+# Docker builds over SSH cannot read the Windows credential store, so the Mac triggers this task,
+# which runs deploy-task.bat inside the logged-in desktop session instead.
+$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ("/c `"" + (Join-Path $RepoDir "windows\deploy-task.bat") + "`"")
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -AllowStartIfOnBatteries
+Register-ScheduledTask -TaskName "NETRA-Deploy" -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+Write-Host "task registered"
 
 $tsIp = ""
 try { $tsIp = (Invoke-Native "tailscale ip -4" | Select-Object -First 1) } catch {}
