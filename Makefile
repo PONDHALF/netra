@@ -90,7 +90,7 @@ deploy: _need-remote ## push โค้ด → Windows git pull + build ใหม
 	git push
 	@# ลบ log เก่าก่อน แล้วสั่ง scheduled task (รันในเซสชัน desktop เพราะ docker build ผ่าน SSH อ่าน credential ไม่ได้)
 	$(SSH) "del /q \"$(WIN_DIR)\\data\\deploy.log\" 2>nul & schtasks /run /tn NETRA-Deploy"
-	@n=0; while :; do sleep 10; \
+	@n=0; while :; do sleep 3; \
 	  log=$$($(SSH) "type \"$(WIN_DIR)\\data\\deploy.log\"" 2>/dev/null | tr -d '\r'); \
 	  total=$$(printf '%s\n' "$$log" | wc -l | tr -d ' '); \
 	  if [ -n "$$log" ] && [ $$total -gt $$n ]; then printf '%s\n' "$$log" | tail -n +$$((n+1)); n=$$total; fi; \
