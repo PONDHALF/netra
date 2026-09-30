@@ -210,10 +210,53 @@ def _background(rng, h: int, w: int) -> np.ndarray:
     return out
 
 
+NIGHT_P = 0.3  # สัดส่วนภาพกลางคืน (ใช้กับทั้งป้ายจำลองและป้ายจริง — ป้ายจริงกลางวันกลายเป็นกลางคืนโดยเฉลยยังถูก)
+
+
+def _night(rng: random.Random, img: np.ndarray) -> np.ndarray:
+    """ทำให้เหมือนถ่ายกลางคืน: ภาพมืด + สีไฟถนน + ไฟหน้ารถส่องป้าย (กลางสว่าง ขอบมืด) + แสงแยง/ฟุ้ง."""
+    h, w = img.shape[:2]
+    f = img.astype(np.float32)
+    mode = rng.random()
+    if mode < 0.45:
+        # ไฟหน้ารถส่องป้าย: ป้ายสะท้อนแสงสว่างกว่ารอบข้าง — มืดจากขอบเข้าหากลาง
+        cx, cy = w * rng.uniform(0.35, 0.65), h * rng.uniform(0.35, 0.65)
+        yy, xx = np.ogrid[:h, :w]
+        d = np.sqrt(((xx - cx) / (w * rng.uniform(0.45, 0.8))) ** 2 + ((yy - cy) / (h * rng.uniform(0.5, 0.9))) ** 2)
+        mask = np.clip(1.0 - d, 0, 1) ** rng.uniform(0.6, 1.5)
+        lo, hi = rng.uniform(0.1, 0.3), rng.uniform(0.8, 1.3)
+        f *= (lo + (hi - lo) * mask)[..., None]
+    else:
+        # มืดทั้งภาพ (ไฟถนนสลัว)
+        f *= rng.uniform(0.15, 0.5)
+    # สีไฟ: โซเดียม (ส้ม) / LED (ฟ้าอมขาว) / ปกติ
+    tint = rng.choice([(1.25, 1.0, 0.65), (0.9, 1.0, 1.2), (1.0, 1.0, 1.0)])
+    f *= np.array(tint, np.float32)
+    if rng.random() < 0.35:
+        # แสงแยง/ไฟหน้ารถคันอื่น: จุดสว่างฟุ้งใกล้ขอบภาพ
+        # อยู่นอกขอบภาพเล็กน้อย — ไม่ให้บังตัวอักษรทั้งหมด (บังจนอ่านไม่ได้ = สอนให้เดา)
+        gx, gy = rng.choice([rng.uniform(-w * 0.1, w * 0.05), rng.uniform(w * 0.95, w * 1.1)]), rng.uniform(0, h)
+        yy, xx = np.ogrid[:h, :w]
+        r = w * rng.uniform(0.05, 0.15)
+        f += (np.exp(-((xx - gx) ** 2 + (yy - gy) ** 2) / (2 * r * r)) * rng.uniform(80, 200))[..., None]
+    # กล้องเร่งความสว่างเอง (auto gain) เมื่อภาพมืด — ภาพจริงกลางคืนจึงไม่ดำสนิท แต่ noise เยอะ (ใส่ใน degrade)
+    m = float(f.mean())
+    target = rng.uniform(50, 90)
+    if m < target:
+        f *= target / max(m, 1.0)
+    img = np.clip(f, 0, 255).astype(np.uint8)
+    if rng.random() < 0.3:
+        # ป้ายสว่างเกิน (overexposed) แล้วฟุ้ง: ตัวอักษรบางลง ขอบเบลอ
+        glow = cv2.GaussianBlur(img, (0, 0), rng.uniform(2, 5))
+        img = cv2.addWeighted(img, 1.0, glow, rng.uniform(0.3, 0.8), 0)
+    return img
+
+
 def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
     img = np.asarray(plate)  # RGB
     h, w = img.shape[:2]
     img = _perspective(rng, img, _background(rng, h, w))
+    night = rng.random() < NIGHT_P
 
     # สิ่งสกปรก / น็อตยึดป้าย / เส้นขีด
     if rng.random() < 0.35:
@@ -230,13 +273,17 @@ def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
     gamma = rng.uniform(0.7, 1.4)
     lut = np.clip(255.0 * (np.arange(256) / 255.0) ** gamma, 0, 255).astype(np.uint8)
     img = cv2.LUT(img, lut)
+    if night:
+        img = _night(rng, img)
 
     # ความละเอียดเป้าหมายของป้าย (กว้าง 32–220 px เน้นช่วงเล็ก) — สุ่มก่อน เพื่อคุมไม่ให้ทั้งเล็กและเบลอหนักจนคนยังอ่านไม่ได้
-    target_w = int(math.exp(rng.uniform(math.log(32), math.log(220))))  # ต่ำกว่า ~32 px คนก็อ่านไม่ได้แล้ว
+    # กลางคืน: ขั้นต่ำ 45 px — มืด + noise + เล็กมากพร้อมกัน คนก็อ่านไม่ได้
+    target_w = int(math.exp(rng.uniform(math.log(45 if night else 32), math.log(220))))
     heavy_ok = target_w >= 60
 
     # เบลอ: Gaussian หรือเบลอจากการเคลื่อนที่ (ป้ายเล็กมากเบลอได้แค่เล็กน้อย เพราะการย่อก็เบลออยู่แล้ว)
-    r = rng.random()
+    # กลางคืนชัตเตอร์ช้า → เบลอจากการเคลื่อนที่บ่อยกว่า
+    r = rng.random() * (0.75 if night else 1.0) + (0.25 if night else 0.0)
     if r < 0.35:
         img = cv2.GaussianBlur(img, (0, 0), rng.uniform(0.3, 1.3 if heavy_ok else 0.6))  # ค่าตามภาพที่วาดขนาด ~340 px
     elif r < 0.6:
@@ -256,9 +303,11 @@ def degrade(rng: random.Random, plate: Image.Image) -> np.ndarray:
         small = cv2.cvtColor(cv2.imdecode(buf, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
     img = cv2.resize(small, (INPUT_W, INPUT_H), interpolation=rng.choice([cv2.INTER_LINEAR, cv2.INTER_CUBIC]))
 
-    if rng.random() < 0.6:  # noise ของเซนเซอร์
-        img = np.clip(img.astype(np.float32) + np.random.normal(0, rng.uniform(2, 12), img.shape), 0, 255).astype(np.uint8)
-    if rng.random() < 0.2:  # กล้องกลางคืน/IR ขาวดำ
+    if night or rng.random() < 0.6:  # noise ของเซนเซอร์ (กลางคืน ISO สูง → หนักกว่า และมี noise สี)
+        sigma = rng.uniform(5, 16) if night else rng.uniform(2, 12)
+        n = np.random.normal(0, sigma, img.shape if not night or rng.random() < 0.5 else img.shape[:2] + (1,))
+        img = np.clip(img.astype(np.float32) + n, 0, 255).astype(np.uint8)
+    if rng.random() < (0.35 if night else 0.1):  # กล้องกลางคืน/IR ขาวดำ
         g = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         img = cv2.cvtColor(g, cv2.COLOR_GRAY2RGB)
     return img
