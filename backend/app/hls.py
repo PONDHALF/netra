@@ -21,6 +21,8 @@ import numpy as np
 log = logging.getLogger("netra.hls")
 
 HLS_RTSP = os.getenv("NETRA_HLS_RTSP", "").strip().rstrip("/")
+if HLS_RTSP.lower() in ("0", "off", "no", "false"):  # ปิดโดยตั้งค่าเป็น 0 (ค่าว่างใน docker-compose จะตกไปใช้ค่าเริ่มต้น)
+    HLS_RTSP = ""
 OUT_FPS = 30
 
 
