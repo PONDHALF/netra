@@ -88,6 +88,15 @@ class EngineConfig:
     # (ถูกเรียกไม่บ่อยและรันใน thread สรุปผล ไม่กระทบภาพสด), ใช้ GPU บน Mac (MPS)
     ocr_gpu_mode: str = os.getenv("NETRA_OCR_GPU", "auto")
 
+    # pipeline กล้องสด: จับรถเฟรมถัดไปพร้อมกับหาป้าย/OCR เฟรมปัจจุบัน — auto = เปิดเมื่อใช้ CUDA (GPU อื่นใช้หลาย thread พร้อมกันไม่ได้ผล)
+    pipeline_mode: str = os.getenv("NETRA_PIPELINE", "auto")
+
+    @property
+    def pipeline(self) -> bool:
+        if self.pipeline_mode == "auto":
+            return self.device.startswith("cuda")
+        return self.pipeline_mode == "1"
+
     @property
     def ocr_gpu(self) -> bool:
         if self.ocr_gpu_mode == "auto":

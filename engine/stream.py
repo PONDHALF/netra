@@ -4,6 +4,8 @@
   1. ไม่มีจุดจบ: รถที่ออกจากภาพจะถูกสรุปผล (vote OCR) ใน thread แยก เพื่อไม่ให้ภาพสดกระตุก
   2. แสดงเลขทะเบียนชั่วคราวบนภาพสดระหว่างรถยังอยู่ในภาพ (อ่านด้วยโมเดลรายตัวอักษรซึ่งเร็ว)
   3. tracker แยกต่อกล้อง — โมเดลตรวจจับป้าย/อ่านป้ายใช้ร่วมกับ Engine (มี lock กันชนกันแล้ว)
+  4. pipeline 2 ขั้น (การ์ด NVIDIA): จับรถเฟรม k+1 ทำพร้อมกับหาป้าย/OCR/วาดของเฟรม k — ความเร็วถูกจำกัดที่ขั้นที่ช้าที่สุด
+     แทนผลรวมทุกขั้น (แลกกับภาพสดช้าลง 1 เฟรม) — process() จึงคืนภาพของเฟรมก่อนหน้า (เฟรมแรกคืน None)
 """
 from __future__ import annotations
 
@@ -47,6 +49,10 @@ class StreamSession:
         self.idx = -1
         self.lost_frames = max(int(self.cfg.lost_seconds * fps), 32)
         self._finalizer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="netra-finalize")
+        self.pipelined = self.cfg.pipeline
+        # 1 worker: จับรถต้องเรียงตามเฟรม (ByteTrack มีสถานะ)
+        self._detector = ThreadPoolExecutor(max_workers=1, thread_name_prefix="netra-detect") if self.pipelined else None
+        self._pending: tuple | None = None  # (frame, เวลาที่รับเฟรม, future ของรถในเฟรมนั้น)
         self.out_width = out_width
         self.timing: dict[str, float] = {}  # ms ต่อเฟรม (ค่าเฉลี่ยเคลื่อนที่) แยกตามขั้น — ใช้หาคอขวด
 
@@ -57,16 +63,36 @@ class StreamSession:
         self.timing[name] = round(ms if prev is None else prev * 0.9 + ms * 0.1, 1)
         return now
 
-    def process(self, frame: np.ndarray) -> np.ndarray:
-        """ประมวลผล 1 เฟรม แล้วคืนภาพที่วาดกรอบแล้ว (สำเนา)."""
+    def process(self, frame: np.ndarray) -> np.ndarray | None:
+        """ส่ง 1 เฟรมเข้าระบบ แล้วคืนภาพที่วาดกรอบแล้ว (สำเนา)
+        โหมด pipeline: คืนภาพของเฟรมก่อนหน้า (เฟรมแรกคืน None) — ใช้ flush() เอาภาพสุดท้าย."""
+        now = time.time()
+        if not self.pipelined:
+            return self._finish(frame, now, self._detect(frame))
+        fut = self._detector.submit(self._detect, frame)
+        prev, self._pending = self._pending, (frame, now, fut)
+        if prev is None:
+            return None
+        return self._finish(prev[0], prev[1], prev[2].result())
+
+    def flush(self) -> np.ndarray | None:
+        """ประมวลผลเฟรมที่ค้างใน pipeline (โหมด pipeline) แล้วคืนภาพของเฟรมนั้น."""
+        prev, self._pending = self._pending, None
+        return None if prev is None else self._finish(prev[0], prev[1], prev[2].result())
+
+    def _detect(self, frame: np.ndarray) -> list:
+        t = time.perf_counter()
+        vehicles = self.tracker.track(frame)
+        self._tick("vehicles", t)
+        return vehicles
+
+    def _finish(self, frame: np.ndarray, ts: float, vehicles: list) -> np.ndarray:
         self.idx += 1
-        self.frame_time[self.idx] = time.time()
+        self.frame_time[self.idx] = ts
         H, W = frame.shape[:2]
         engine = self.engine
 
         t = time.perf_counter()
-        vehicles = self.tracker.track(frame)
-        t = self._tick("vehicles", t)
         # หาป้ายเฉพาะเมื่อมีรถคันใหญ่พอจะอ่านป้ายได้ (เฟรมที่มีแต่รถไกลๆ ไม่ต้องเสีย ~25–40 ms)
         big_enough = any((b.x2 - b.x1) >= self.cfg.min_vehicle_frac * W for _, _, b in vehicles)
         if not (engine.plates.available and big_enough):
@@ -151,6 +177,13 @@ class StreamSession:
 
     def close(self) -> None:
         """สรุปผลรถที่ยังค้างอยู่ในภาพ แล้วรอให้เสร็จ."""
+        try:
+            self.flush()
+        except Exception:  # noqa: BLE001
+            log.exception("ประมวลผลเฟรมสุดท้ายไม่สำเร็จ")
+        finally:
+            if self._detector is not None:
+                self._detector.shutdown(wait=True)
         for tr in list(self.tracks.values()):
             self._finalizer.submit(self._finalize, tr)
         self.tracks.clear()

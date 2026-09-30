@@ -159,10 +159,11 @@ class CameraRunner:
                             break
                         frame, last_no = self._latest, self._latest_no
                     t = time.time()
-                    annotated = session.process(frame)
-                    t_enc = time.perf_counter()
-                    self._publish_frame(annotated)
-                    session._tick("jpeg", t_enc)
+                    annotated = session.process(frame)  # โหมด pipeline: เฟรมแรกยังไม่มีภาพ (None)
+                    if annotated is not None:
+                        t_enc = time.perf_counter()
+                        self._publish_frame(annotated)
+                        session._tick("jpeg", t_enc)
                     now = time.time()
                     ema = 0.9 * ema + 0.1 * (1.0 / max(now - last_t, 1e-6)) if ema else 1.0 / max(now - last_t, 1e-6)
                     last_t = now
