@@ -41,7 +41,15 @@ export default function EventPage() {
   }, [id])
 
   if (error) return <div className="py-20 text-center text-danger">{error}</div>
-  if (!e) return <div className="py-20 text-center text-muted">กำลังโหลด…</div>
+  if (!e) return (
+    <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+      <div className="h-96 animate-pulse rounded-xl bg-panel-2/70" />
+      <div className="space-y-4">
+        <div className="h-64 animate-pulse rounded-xl bg-panel-2/70" />
+        <div className="h-48 animate-pulse rounded-xl bg-panel-2/70" />
+      </div>
+    </div>
+  )
 
   const dirty = text.trim() !== (e.plate_text ?? '') || prov !== (e.plate_province ?? '') || vtype !== e.vehicle_type
   const save = async (ev: React.FormEvent) => {
@@ -67,8 +75,11 @@ export default function EventPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => nav(-1)} className="text-muted hover:text-fg"><ArrowLeft className="size-5" /></button>
-        <h1 className="text-xl font-semibold">รายละเอียดรถ <span className="font-mono text-muted">#{e.id}</span></h1>
+        <button onClick={() => nav(-1)} aria-label="ย้อนกลับ"
+          className="inline-flex size-9 cursor-pointer items-center justify-center rounded-lg border border-line bg-panel text-muted transition-colors hover:border-accent/40 hover:text-fg">
+          <ArrowLeft className="size-4" />
+        </button>
+        <h1 className="text-2xl font-bold">รายละเอียดรถ <span className="font-mono text-muted">#{e.id}</span></h1>
         {e.is_corrected && (
           <span className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent">
             <PencilLine className="size-3" />แก้ไขด้วยมือแล้ว
@@ -88,7 +99,7 @@ export default function EventPage() {
           </div>
         </Card>
 
-        <div className="space-y-4">
+        <div className="space-y-4 lg:sticky lg:top-20">
           <Card>
             <CardHeader><CardTitle>ป้ายทะเบียน</CardTitle>
               <span className={cn('font-mono text-sm', e.is_corrected ? 'text-accent' : confTone(e.plate_conf))}>
@@ -103,9 +114,15 @@ export default function EventPage() {
                   <span className="text-sm text-muted">ไม่พบภาพป้าย</span>
                 )}
               </div>
-              <div className="flex justify-center">
+              <div className="flex justify-center rounded-lg bg-gradient-to-b from-panel-2/40 to-transparent py-3">
                 <PlateChip text={e.plate_text} province={e.plate_province} size="lg" />
               </div>
+              {!e.is_corrected && e.plate_text && (
+                <div className="h-1.5 overflow-hidden rounded-full bg-line/70" title={`ความมั่นใจ ${pct(e.plate_conf)}`}>
+                  <div className="h-full rounded-full bg-gradient-to-r from-accent to-ok transition-[width] duration-700"
+                    style={{ width: `${Math.min(100, Math.max(0, (e.plate_conf ?? 0) * 100))}%` }} />
+                </div>
+              )}
               {e.is_corrected && (
                 <div className="text-center text-xs text-muted">
                   AI อ่านได้เดิม: <span className="font-medium text-fg/80">{e.original_plate_text ?? '(อ่านไม่ได้)'} {e.original_plate_province ?? ''}</span>
@@ -136,7 +153,7 @@ export default function EventPage() {
                   </Select>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button type="submit" disabled={!dirty || saving}>
+                  <Button type="submit" disabled={!dirty || saving} className={cn(saved && 'from-ok to-ok')}>
                     {saved ? <><Check />บันทึกแล้ว</> : <><Save />บันทึก</>}
                   </Button>
                   {e.is_corrected && (
