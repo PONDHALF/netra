@@ -43,18 +43,18 @@ function EngineStatus() {
 
 export function Layout() {
   const link = ({ isActive }: { isActive: boolean }) =>
-    cn('inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
-      isActive ? 'bg-panel-2 text-fg' : 'text-muted hover:text-fg')
+    cn('relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors sm:px-3',
+      isActive ? 'bg-panel-2 text-fg after:absolute after:inset-x-3 after:-bottom-[9px] after:h-0.5 after:rounded-full after:bg-accent' : 'text-muted hover:bg-panel-2/60 hover:text-fg')
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-line/80 bg-bg/70 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4">
           <NavLink to="/" className="flex items-center gap-2">
             <Logo className="size-7" />
-            <span className="font-mono text-lg font-medium tracking-[0.2em]">NETRA</span>
+            <span className="hidden font-mono text-lg font-medium tracking-[0.2em] sm:inline">NETRA</span>
           </NavLink>
           <nav className="flex items-center gap-1">
-            <NavLink to="/live" className={link}><Radio className="size-4" />Live</NavLink>
+            <NavLink to="/live" className={link}><Radio className="size-4" /><span>Live</span></NavLink>
             <NavLink to="/" end className={link}><Upload className="size-4" />อัปโหลด</NavLink>
             <NavLink to="/search" className={link}><Search className="size-4" />ค้นหาป้าย</NavLink>
           </nav>
@@ -64,6 +64,9 @@ export function Layout() {
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6">
         <Outlet />
       </main>
+      <footer className="border-t border-line/60 py-4 text-center text-[11px] text-muted/70">
+        NETRA · ตรวจจับรถและอ่านป้ายทะเบียนไทย
+      </footer>
     </div>
   )
 }

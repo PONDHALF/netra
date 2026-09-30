@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, SelectHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
 const base =
-  'h-9 w-full rounded-lg border border-line bg-bg/60 px-3 text-sm text-fg placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 disabled:opacity-50'
+  'h-10 w-full rounded-lg border border-line bg-bg/60 px-3 transition-colors hover:border-muted/40 text-sm text-fg placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 disabled:opacity-50'
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(base, className)} {...props} />

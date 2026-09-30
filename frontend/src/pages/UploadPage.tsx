@@ -30,8 +30,8 @@ function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null
       }}
       onClick={() => input.current?.click()}
       className={cn(
-        'relative flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 text-center transition-colors',
-        over ? 'border-accent bg-accent/5' : 'border-line hover:border-accent/50 hover:bg-panel-2/40',
+        'relative flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 text-center transition-all duration-200',
+        over ? 'scale-[1.01] border-accent bg-accent/10 shadow-glow' : 'border-line bg-bg/30 hover:border-accent/50 hover:bg-accent/5',
       )}
     >
       <input ref={input} type="file" accept={ACCEPT} className="hidden" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
@@ -74,7 +74,7 @@ function JobCard({ job, onChanged }: { job: Job; onChanged: () => void }) {
   }
   return (
     <Link to={`/jobs/${job.id}`} className="group block">
-      <Card className="overflow-hidden transition-colors group-hover:border-accent/40">
+      <Card className="overflow-hidden transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-accent/40 group-hover:shadow-[0_12px_32px_-12px_rgb(34_211_238/0.25)]">
         <div className="relative aspect-video bg-black">
           {job.thumb_url ? (
             <img src={job.thumb_url} alt="" className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
@@ -190,7 +190,7 @@ export default function UploadPage() {
           </div>
           <h1 className="text-3xl font-bold leading-tight md:text-4xl">
             ตรวจจับรถ อ่านป้ายทะเบียนไทย<br />
-            <span className="text-muted">จากวิดีโอกล้องวงจรปิด</span>
+            <span className="bg-gradient-to-r from-accent to-plate bg-clip-text text-transparent">จากวิดีโอกล้องวงจรปิด</span>
           </h1>
           <p className="max-w-lg text-muted">
             อัปโหลดวิดีโอ ระบบจะหารถทุกคัน เลือกภาพที่ชัดที่สุด อ่านเลขทะเบียนและจังหวัด
@@ -198,8 +198,8 @@ export default function UploadPage() {
           </p>
           <ol className="grid max-w-lg grid-cols-3 gap-2 text-xs text-muted">
             {['ตรวจจับ + ติดตามรถ', 'เลือกภาพชัดที่สุด', 'อ่านป้าย (OCR)'].map((s, i) => (
-              <li key={s} className="rounded-lg border border-line bg-panel/60 p-2">
-                <span className="font-mono text-accent">0{i + 1}</span> {s}
+              <li key={s} className="rounded-lg border border-line bg-panel/60 p-2.5 leading-snug">
+                <span className="mb-1 block font-mono text-base text-accent">0{i + 1}</span>{s}
               </li>
             ))}
           </ol>
@@ -268,7 +268,7 @@ export default function UploadPage() {
             {jobs && <span className="text-xs text-muted">{jobs.length} รายการ</span>}
           </CardHeader>
           {jobs && jobs.length === 0 && (
-            <div className="rounded-xl border border-dashed border-line p-10 text-center text-sm text-muted">ยังไม่มีวิดีโอ</div>
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line p-12 text-center text-sm text-muted"><Film className="size-8 opacity-60" />ยังไม่มีวิดีโอ — อัปโหลดไฟล์แรกได้ที่ด้านบน</div>
           )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {jobs?.map((j) => <JobCard key={j.id} job={j} onChanged={refresh} />)}

@@ -113,7 +113,7 @@ function CameraTile({ cam, status, onChanged }: { cam: Camera; status: CameraSta
     onChanged()
   }
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden transition-colors hover:border-accent/30">
       <div className="relative aspect-video bg-black">
         {online ? (
           <img key={`${status.started_at}-${imgKey}`} src={api.mjpegUrl(cam.id, `${status.started_at}-${imgKey}`)}
@@ -125,7 +125,7 @@ function CameraTile({ cam, status, onChanged }: { cam: Camera; status: CameraSta
             {status.error && <div className="max-w-md text-xs text-danger/90">{status.error}</div>}
           </div>
         )}
-        <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-bg/80 px-2 py-0.5 text-[11px] backdrop-blur">
+        <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full border border-white/10 bg-bg/75 px-2.5 py-1 text-[11px] backdrop-blur-md">
           <span className={cn('size-1.5 rounded-full', st.cls)} />
           {online && <span className="font-semibold text-danger">LIVE</span>}
           <span>{online ? `${status.fps} fps` : st.label}</span>
@@ -189,8 +189,13 @@ export default function LivePage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="flex items-center gap-2 text-xl font-semibold"><Radio className="size-5 text-danger" />Live</h1>
-        {cams && <span className="text-sm text-muted">ออนไลน์ {online}/{cams.length} กล้อง</span>}
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><Radio className="size-6 text-danger" />Live</h1>
+        {cams && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-panel px-3 py-1 text-xs text-muted">
+            <span className={cn('size-1.5 rounded-full', online > 0 ? 'bg-ok animate-pulse' : 'bg-muted')} />
+            ออนไลน์ <b className="font-mono text-fg">{online}/{cams.length}</b> กล้อง
+          </span>
+        )}
         {cams && cams.length > 0 && !adding && (
           <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setAdding(true)}><Plus />เพิ่มกล้อง</Button>
         )}

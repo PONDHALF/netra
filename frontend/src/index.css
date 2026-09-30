@@ -10,10 +10,10 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   --color-bg: #070b14;
-  --color-panel: #0d1422;
-  --color-panel-2: #121b2d;
-  --color-line: #1f2a40;
-  --color-muted: #8391ab;
+  --color-panel: #0e1626;
+  --color-panel-2: #141e33;
+  --color-line: #22304a;
+  --color-muted: #94a3bd;
   --color-fg: #e6ebf5;
   --color-accent: #22d3ee;
   --color-accent-fg: #03222a;
@@ -26,6 +26,9 @@
   --color-bus: #f59e0b;
   --color-truck: #a78bfa;
 
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-glow: 0 0 0 1px rgb(34 211 238 / 0.35), 0 6px 24px -6px rgb(34 211 238 / 0.45);
+
   --animate-pop: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
   @keyframes pop {
     from { opacity: 0; transform: translateY(-8px) scale(0.98); }
@@ -34,7 +37,9 @@
 }
 
 html, body, #root { height: 100%; }
+html { scroll-behavior: smooth; }
 body {
+  font-variant-numeric: tabular-nums;
   background:
     radial-gradient(1200px 600px at 80% -10%, rgb(34 211 238 / 0.07), transparent 60%),
     radial-gradient(900px 500px at -10% 110%, rgb(250 204 21 / 0.04), transparent 60%),
@@ -42,6 +47,27 @@ body {
   color: var(--color-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* grid texture จางๆ ด้านหลัง */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.018) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 75%);
+}
+
+::selection { background: rgb(34 211 238 / 0.3); }
+:focus-visible { outline: 2px solid rgb(34 211 238 / 0.7); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
 
 /* scrollbar */
