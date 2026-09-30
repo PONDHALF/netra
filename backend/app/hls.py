@@ -11,8 +11,10 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import socket
 import subprocess
 import threading
+from urllib.parse import urlsplit, urlunsplit
 
 import numpy as np
 
@@ -37,6 +39,13 @@ def _ffmpeg() -> str | None:
         return shutil.which("ffmpeg")
 
 
+def _resolve(url: str) -> str:
+    """แปลงชื่อโฮสต์ใน URL เป็น IP ก่อนส่งให้ ffmpeg — ffmpeg แบบ static (imageio-ffmpeg) พัง (segfault) ตอนหาชื่อโฮสต์ใน Docker."""
+    u = urlsplit(url)
+    ip = socket.gethostbyname(u.hostname)
+    return urlunsplit(u._replace(netloc=f"{ip}:{u.port}" if u.port else ip))
+
+
 class VideoPublisher:
     """เขียนเฟรม BGR ลง ffmpeg (stdin) → H.264 → RTSP (MediaMTX). เขียนใน thread แยก และทิ้งเฟรมเมื่อ ffmpeg ตามไม่ทัน
     เพื่อไม่ให้ลูปประมวลผลค้าง"""
@@ -49,6 +58,11 @@ class VideoPublisher:
         exe = _ffmpeg()
         if not enabled() or exe is None:
             return
+        try:
+            base = _resolve(HLS_RTSP)
+        except OSError as e:
+            log.warning("หา MediaMTX (%s) ไม่พบ: %s — ใช้ MJPEG แทน", HLS_RTSP, e)
+            return
         cmd = [exe, "-hide_banner", "-loglevel", "error",
                # เวลาของเฟรม = เวลาที่ได้รับ (ประมวลผลไม่เท่ากันทุกเฟรม) แล้วแปลงเป็น 30 fps คงที่
                "-use_wallclock_as_timestamps", "1", "-f", "rawvideo", "-pix_fmt", "bgr24",
@@ -57,7 +71,7 @@ class VideoPublisher:
                "-pix_fmt", "yuv420p", "-threads", "4", "-b:v", "3M", "-maxrate", "3M", "-bufsize", "3M",
                # keyframe ทุก 1 วินาที = ขอบ segment ของ HLS
                "-g", str(OUT_FPS), "-keyint_min", str(OUT_FPS), "-sc_threshold", "0",
-               "-f", "rtsp", "-rtsp_transport", "tcp", f"{HLS_RTSP}/{path}"]
+               "-f", "rtsp", "-rtsp_transport", "tcp", f"{base}/{path}"]
         try:
             self._proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         except Exception as e:  # noqa: BLE001
