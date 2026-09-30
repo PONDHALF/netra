@@ -67,6 +67,10 @@ class EngineConfig:
     imgsz: int = int(os.getenv("NETRA_IMGSZ", "640"))
     # ป้ายในภาพกล้องวงจรปิดเล็กมาก (~30 px ที่ 1080p) — ถ้าย่อทั้งภาพเหลือ 640 จะหาไม่เจอเลย
     plate_imgsz: int = int(os.getenv("NETRA_PLATE_IMGSZ", "1280"))
+    # หาป้าย: frame = ทั้งภาพที่ plate_imgsz | crops = เฉพาะในกรอบรถ รวมเป็นภาพเดียว (mosaic) ขนาด plate_crop_imgsz
+    # (ภาพเล็กลง ~4 เท่า และรถถูกขยายให้เต็มช่อง ป้ายเล็กจึงใหญ่ขึ้น)
+    plate_mode: str = os.getenv("NETRA_PLATE_MODE", "frame")
+    plate_crop_imgsz: int = int(os.getenv("NETRA_PLATE_CROP_IMGSZ", "640"))
     vehicle_conf: float = 0.35
     plate_conf: float = 0.30
     # ประมวลผลทุกๆ N เฟรม (0 = อัตโนมัติ ให้ได้ ~15 เฟรม/วินาทีของวิดีโอ)

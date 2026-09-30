@@ -69,7 +69,14 @@ class StreamSession:
         t = self._tick("vehicles", t)
         # หาป้ายเฉพาะเมื่อมีรถคันใหญ่พอจะอ่านป้ายได้ (เฟรมที่มีแต่รถไกลๆ ไม่ต้องเสีย ~25–40 ms)
         big_enough = any((b.x2 - b.x1) >= self.cfg.min_vehicle_frac * W for _, _, b in vehicles)
-        plates = engine.plates.detect(frame) if engine.plates.available and big_enough else []
+        if not (engine.plates.available and big_enough):
+            plates = []
+        elif self.cfg.plate_mode == "crops":
+            # รถที่เล็กกว่า 2/3 ของเกณฑ์ ป้ายเล็กเกินอ่านได้ — ไม่ต้องเสียช่องในภาพรวม
+            plates = engine.plates.detect_crops(
+                frame, [b for _, _, b in vehicles if (b.x2 - b.x1) >= self.cfg.min_vehicle_frac * W * 0.66])
+        else:
+            plates = engine.plates.detect(frame)
         t = self._tick("plates", t)
         items = []
         for v in assign_plates(vehicles, plates):
