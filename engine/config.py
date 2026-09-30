@@ -69,13 +69,14 @@ class EngineConfig:
     plate_imgsz: int = int(os.getenv("NETRA_PLATE_IMGSZ", "1280"))
     # หาป้าย: frame = ทั้งภาพที่ plate_imgsz | crops = เฉพาะในกรอบรถ รวมเป็นภาพเดียว (mosaic) ขนาด plate_crop_imgsz
     # (ภาพเล็กลง ~4 เท่า และรถถูกขยายให้เต็มช่อง ป้ายเล็กจึงใหญ่ขึ้น)
-    plate_mode: str = os.getenv("NETRA_PLATE_MODE", "frame")
+    plate_mode: str = os.getenv("NETRA_PLATE_MODE", "crops")
     plate_crop_imgsz: int = int(os.getenv("NETRA_PLATE_CROP_IMGSZ", "640"))
     vehicle_conf: float = 0.35
     plate_conf: float = 0.30
     # ประมวลผลทุกๆ N เฟรม (0 = อัตโนมัติ ให้ได้ ~15 เฟรม/วินาทีของวิดีโอ)
     frame_stride: int = int(os.getenv("NETRA_FRAME_STRIDE", "0"))
-    target_fps: float = 15.0
+    video_fps: float = float(os.getenv("NETRA_VIDEO_FPS", "15"))  # งานวิดีโออัปโหลด (ไม่ต้องทันเวลาจริง)
+    target_fps: float = float(os.getenv("NETRA_TARGET_FPS", "30"))  # กล้องสด: 15 fps อ่านป้ายตรงเฉลยได้ 68% เทียบกับ 89–94% ที่ 30 fps (training/stream_bench.py)
     # รถหายจากภาพกี่วินาทีจึงถือว่าออกจากภาพแล้ว
     lost_seconds: float = 2.0
     min_track_hits: int = 5           # ต้องเห็นอย่างน้อยกี่เฟรมที่ประมวลผล (~0.3 วินาที) — ตัดเศษ track ที่ขาดตอน

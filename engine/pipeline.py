@@ -147,7 +147,7 @@ class Engine:
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        stride = cfg.frame_stride or max(1, round(fps / cfg.target_fps))
+        stride = cfg.frame_stride or max(1, round(fps / cfg.video_fps))
         # ByteTrack จำรถที่หายไปได้ 30 เฟรมที่ประมวลผล — ต้องรอนานกว่านั้นก่อนสรุปผล
         lost_frames = max(int(cfg.lost_seconds * fps), stride * 32)
         log.info("video %s: %dx%d @ %.2ffps, %d frames, stride=%d", video_path, W, H, fps, total, stride)
