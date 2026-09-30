@@ -18,6 +18,7 @@ from pathlib import Path
 
 import cv2
 
+from . import hls
 from .config import DATA_DIR, ROOT
 from .db import SessionLocal
 from .models import Event, Source
@@ -148,6 +149,7 @@ class CameraRunner:
                                     on_event=lambda ev, ts, d=out_dir: self._on_event(ev, ts, d))
             self._set(state="online", error=None)
             last_no, interval, ema, last_t = 0, 1.0 / target_fps, 0.0, time.time()
+            publisher = None  # H.264 → MediaMTX → LL-HLS (สร้างเมื่อได้ภาพแรก เพราะต้องรู้ขนาดภาพ)
             try:
                 while not self._stop.is_set():
                     with self._frame_cond:
@@ -161,6 +163,11 @@ class CameraRunner:
                     t = time.time()
                     annotated = session.process(frame)  # โหมด pipeline: เฟรมแรกยังไม่มีภาพ (None)
                     if annotated is not None:
+                        if publisher is None and hls.enabled():
+                            publisher = hls.VideoPublisher(f"annot{self.cam_id}", annotated.shape[1], annotated.shape[0])
+                            self._set(hls=f"annot{self.cam_id}" if publisher.alive else None)
+                        if publisher is not None:
+                            publisher.write(annotated)
                         t_enc = time.perf_counter()
                         self._publish_frame(annotated)
                         session._tick("jpeg", t_enc)
@@ -180,6 +187,9 @@ class CameraRunner:
                 reader.join(timeout=5)
                 cap.release()
                 session.close()
+                if publisher is not None:
+                    publisher.close()
+                self._set(hls=None)
             if not self._stop.is_set():
                 self._stop.wait(backoff)
         self._set(state="stopped", fps=0.0)

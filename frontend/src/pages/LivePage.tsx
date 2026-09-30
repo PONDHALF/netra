@@ -1,3 +1,4 @@
+import Hls from 'hls.js'
 import { Pause, Play, Plus, Radio, Trash2, Video, VideoOff, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -97,8 +98,42 @@ function AddCamera({ onAdded, onCancel }: { onAdded: () => void; onCancel?: () =
   )
 }
 
+const HLS_PORT = 8888  // พอร์ต LL-HLS ของ MediaMTX (docker-compose: camsim)
+const HLS_GIVE_UP_MS = 12000  // ไม่เริ่มเล่นภายในเวลานี้ → ใช้ MJPEG แทน
+
+/** ภาพสดแบบวิดีโอ H.264 (LL-HLS) — ลื่นและกินเน็ตน้อยกว่า MJPEG; ถ้าเล่นไม่ได้เรียก onFail เพื่อกลับไปใช้ MJPEG */
+function HlsVideo({ path, onFail }: { path: string; onFail: () => void }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  const failRef = useRef(onFail)  // onFail เปลี่ยนทุกครั้งที่ render — อย่าให้ทำให้ player เริ่มใหม่
+  failRef.current = onFail
+  useEffect(() => {
+    const video = ref.current
+    if (!video) return
+    const src = `http://${location.hostname}:${HLS_PORT}/${path}/index.m3u8`
+    let hls: Hls | null = null
+    const fail = () => failRef.current()
+    const giveUp = setTimeout(fail, HLS_GIVE_UP_MS)
+    const started = () => clearTimeout(giveUp)
+    video.addEventListener('playing', started)
+    if (Hls.isSupported()) {
+      hls = new Hls({ lowLatencyMode: true, backBufferLength: 5, liveSyncDurationCount: 2, liveMaxLatencyDurationCount: 6 })
+      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) { clearTimeout(giveUp); fail() } })
+      hls.loadSource(src)
+      hls.attachMedia(video)
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = src  // Safari เล่น HLS ได้เอง
+    } else {
+      fail()
+    }
+    video.play().catch(() => {})
+    return () => { clearTimeout(giveUp); video.removeEventListener('playing', started); hls?.destroy() }
+  }, [path])
+  return <video ref={ref} muted autoPlay playsInline className="h-full w-full object-contain" />
+}
+
 function CameraTile({ cam, status, onChanged }: { cam: Camera; status: CameraStatus; onChanged: () => void }) {
   const [imgKey, setImgKey] = useState(0)
+  const [hlsFailed, setHlsFailed] = useState<string | null>(null)  // path ที่เล่น HLS ไม่ได้ (เริ่มกล้องใหม่ → ลองใหม่)
   const online = status.state === 'online'
   const st = STATE_TH[status.state] ?? STATE_TH.stopped
   // สตรีมหลุด (เช่นกล้องต่อใหม่) → ขอภาพใหม่อัตโนมัติ
@@ -115,7 +150,10 @@ function CameraTile({ cam, status, onChanged }: { cam: Camera; status: CameraSta
   return (
     <Card className="overflow-hidden transition-colors hover:border-accent/30">
       <div className="relative aspect-video bg-black">
-        {online ? (
+        {online && status.hls && hlsFailed !== `${status.hls}-${status.started_at}` ? (
+          <HlsVideo key={`${status.hls}-${status.started_at}`} path={status.hls}
+            onFail={() => setHlsFailed(`${status.hls}-${status.started_at}`)} />
+        ) : online ? (
           <img key={`${status.started_at}-${imgKey}`} src={api.mjpegUrl(cam.id, `${status.started_at}-${imgKey}`)}
             onError={onImgError} alt={cam.name} className="h-full w-full object-contain" />
         ) : (

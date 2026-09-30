@@ -77,6 +77,7 @@ export interface CameraStatus {
   height: number | null
   events: number
   started_at?: number
+  hls?: string | null  // path ของวิดีโอ LL-HLS ใน MediaMTX (ถ้ามี) — ไม่มี = ใช้ MJPEG
 }
 
 export interface Camera {

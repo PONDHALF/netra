@@ -12,12 +12,15 @@ services:
     environment:
       - NETRA_DEVICE=${NETRA_DEVICE:-}      # เว้นว่าง = เลือกอัตโนมัติ (cuda > cpu)
       - NETRA_TYPHOON=${NETRA_TYPHOON:-0}   # 1 = ใช้ Typhoon OCR 3B ช่วยอ่านจังหวัด (แรม ~8 GB)
+      - NETRA_HLS_RTSP=${NETRA_HLS_RTSP:-rtsp://camsim:8554}  # ภาพสดแบบวิดีโอ (LL-HLS) ผ่าน MediaMTX — เว้นว่างเพื่อใช้ MJPEG อย่างเดียว
       - NETRA_DEMO_CAMERA=${NETRA_DEMO_CAMERA:-rtsp://camsim:8554/cam1}  # สร้างกล้องจำลองให้ ถ้ายังไม่มีกล้อง
     restart: unless-stopped
 
   # กล้องจำลอง (RTSP) — เล่น data/samples/live.mp4 วน ใช้ทดสอบระหว่างยังไม่มีกล้องจริง
   camsim:
     image: bluenviron/mediamtx:latest-ffmpeg
+    ports:
+      - "8888:8888"                        # LL-HLS ของภาพสดที่วาดกรอบแล้ว
     volumes:
       - ./docker/mediamtx.yml:/mediamtx.yml:ro
       - ./data/samples:/samples:ro
