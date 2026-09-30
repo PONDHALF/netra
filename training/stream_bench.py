@@ -7,7 +7,8 @@
 วัด
   ความเร็ว   ms ต่อเฟรมแยกตามขั้น (ถอดรหัส / รถ / ป้าย / track+ocr / วาด) และ fps สูงสุดที่ทำได้
   การจับรถ   จำนวนรถ, อ่านป้ายได้, มั่นใจ ≥ 0.5, ป้ายเดียวกันถูกบันทึกซ้ำ
-  ความถูกต้อง ถ้ามีเฉลย data/benchmark/stream/<ชื่อวิดีโอ>.gt.csv (time_sec, plate) — จับคู่ตามเวลา ±2 วินาที
+  ความถูกต้อง ถ้ามีเฉลย data/benchmark/stream/<ชื่อวิดีโอ>.gt.csv (time_sec, plate) — มีรถที่อ่านได้ตรงเฉลยในช่วง ±2 วินาทีไหม
+             (live.gt.csv = เฉลยอัตโนมัติ: ป้ายที่ PlateNet + char-OCR อ่านตรงกันในรอบ ref ทุกเฟรม ถูก ~95% — ใช้เทียบว่า "ไม่แย่ลง")
 
 ผลลัพธ์: data/benchmark/stream/<label>/{result.json, events.csv, plates/*.jpg}
 """
@@ -146,9 +147,9 @@ def compare(labels: list[str]) -> None:
         acc = accuracy(rows, list(csv.DictReader(open(gt_path, encoding="utf-8")))) if gt_path.exists() else None
         table.append((lb, res, acc))
     print(f"{'รอบ':14} {'fps ใช้':>7} {'ms/เฟรม':>8} {'fps สูงสุด':>10} {'รถ':>5} {'อ่านได้':>7} {'มั่นใจ':>6} {'ซ้ำ':>4}"
-          f"{'  เจอ/ถูก (เฉลย)':>18}")
+          f"{'  อ่านตรงเฉลย':>16}")
     for lb, r, acc in table:
-        a = f"  {acc['found']}/{acc['correct']} จาก {acc['gt']}" if acc else ""
+        a = f"  {acc['correct']}/{acc['gt']} ({acc['correct_rate']:.0%})" if acc else ""
         print(f"{lb:14} {r['eff_fps']:>7} {r['ms_per_frame']['total']:>8} {r['max_fps']:>10} {r['vehicles']:>5} "
               f"{r['plates_read']:>7} {r['confident']:>6} {r['duplicate_plates']:>4}{a}")
     for lb, r, _ in table:
