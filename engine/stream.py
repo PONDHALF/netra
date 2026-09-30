@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import time
 
 import cv2
@@ -53,6 +55,8 @@ class StreamSession:
         # 1 worker: จับรถต้องเรียงตามเฟรม (ByteTrack มีสถานะ)
         self._detector = ThreadPoolExecutor(max_workers=1, thread_name_prefix="netra-detect") if self.pipelined else None
         self._pending: tuple | None = None  # (frame, เวลาที่รับเฟรม, future ของรถในเฟรมนั้น)
+        if self.pipelined:  # ค่าเริ่มต้น 5 ms: thread ที่รอ GIL รอนานเกินไปเมื่ออีก thread รัน Python ต่อเนื่อง
+            sys.setswitchinterval(float(os.getenv("NETRA_SWITCH_INTERVAL", "0.0005")))
         self.out_width = out_width
         self.timing: dict[str, float] = {}  # ms ต่อเฟรม (ค่าเฉลี่ยเคลื่อนที่) แยกตามขั้น — ใช้หาคอขวด
 
